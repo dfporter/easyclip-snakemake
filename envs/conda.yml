@@ -1,0 +1,24 @@
+name: easyclip-env
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python>=3.6
+  - deeptools=3.3.0
+  - numpy
+  - gffutils
+  - cutadapt
+  - scipy
+#  - functools
+#  - json
+  - HTSeq
+  - statsmodels
+#  - liftover
+  - pyBigWig
+#  - sklearn.neighbors
+  - pysam
+  - scikit-learn
+  - pandas
+  - snakemake
+  - star=2.7.1a
+  - samtools

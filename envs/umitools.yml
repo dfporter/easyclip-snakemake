@@ -1,0 +1,8 @@
+name: umitools-snakemake-env
+channels:
+  - bioconda
+  - conda-forge
+dependencies:
+  - python=3.6
+  - umi_tools=1.0
+  - samtools
