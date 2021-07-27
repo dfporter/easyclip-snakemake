@@ -20,6 +20,7 @@ import scripts.exp
 import scripts.rnaDataFileMaker
 import scripts.make_repeats_chrom
 import scripts.split_bam
+import scripts.random_sequence
 
 # Load config file.
 configfile: "config.yaml"
@@ -42,7 +43,13 @@ if ('top_dir' not in config) and ('name' in config):
 # A star index is required.   
 if ('STAR_index' in config) and ('STAR index' not in config):
     config['STAR index'] = config['STAR_index']
-    
+
+# If run_clipper isn't given in the config (or is set to 'false'), the default is to not run clipper.
+if 'run_clipper' in config and (not config['run_clipper']):
+    config['run_clipper'] = 'false' # Lower case false because this is used as a string in a bash command.
+if 'run_clipper' in config and (config['run_clipper']!='false') and config['run_clipper']:
+    config['run_clipper'] = 'true' # Lower case false because this is used as a string in a bash command.
+
 # Set some default path values as relative to the top_dir specified in config.yaml.
 _to = lambda x: config['top_dir'].rstrip('/') + f'/{x}'
 defaults = {
@@ -50,11 +57,12 @@ defaults = {
     'bigwig': _to('bigwig'), 'bedgraph': _to('bedgraph'), 'counts': _to('counts.txt'), 'STAR': 'STAR',
     'outs': _to('outs/'), 'counts': _to('outs/counts/'),
     'scheme': _to('samples.txt'),
+    'run_clipper': 'false',  # Lower case false because this is used as a string in a bash command.
 }
 
 for key in [_ for _ in defaults.keys() if (_ not in config)]:
     config[key] = defaults[key]
-
+    
 # Create exp object for organizing some tasks.
 ex = scripts.exp.exp(name=config['name'], file_paths=config)
 
@@ -77,14 +85,18 @@ df['Gene'] = [re.sub(' ', '-', x) for x in df['Gene']]  # Get rid of spaces.
 samples = [f"{exp}_{protein}_{l5_bc}_{l3_bc}" for exp,protein,l5_bc,l3_bc in zip(
     df['Experiment'], df['Gene'], df['L5_BC'], df['L3_BC'])]
 
+proteins = list(set(df['Gene'])) 
+
 # Constrain sample wildcards to not contain '/'.
 wildcard_constraints:
-    sample="[^\/]+",
+    sample = "[^\/\.]+",
+    protein= "[^\/\.]+",
 
 # Read the sample sheet into the exp object.
 ex.read_scheme(config['samples'])
 
 # Define these global variables used numerous times in the workflow.
+TOP_DIR = config['top_dir'].rstrip('/')
 SAMS_DIR = config['sams'].rstrip('/')  # Holds both bam and sam, as well as STAR output logs.
 FASTQ_DIR = config['fastq'].rstrip('/')  # The directory to put fastq intermediates in.
 BIGWIG = config['bigwig'].rstrip('/')  # Holds bigwig outputs.
@@ -112,37 +124,153 @@ rule all:
         FASTQ_DIR + '/ready_to_map/R1.fastq.gz',
         expand(SAMS_DIR + "/split/{sample}.bam", sample=samples),
         expand(SAMS_DIR + "/dedup/{sample}.bam", sample=samples),
-        expand(BIGWIG + "/{sample}.bigwig", sample=samples),
+        #expand(BIGWIG + "/{sample}.bigwig", sample=samples),
         expand(SAMS_DIR + "/3end/{sample}.bam", sample=samples),
-        "done/read_scheme.done",
         config['counts'].rstrip('/') + "/bigwig_3prime_counts_transcripts.txt",
-        config['counts'].rstrip('/') + "/counts_transcripts.txt",
+        #config['counts'].rstrip('/') + "/bam_3prime_counts_transcripts.txt",
         #config['counts'].rstrip('/') + "/featureCounts_on_bams.txt",
-        chr_only = expand(SAMS_DIR + '/genome_only/{sample}.bam', sample=samples),
+        expand(SAMS_DIR + '/genome_only/{sample}.bam', sample=samples),
 
         # Uncomment this to enable the use of clipper.
-        #bed = expand(config['top_dir'] + '/peaks/clipper/{sample}.bed', sample=samples)
+        #bed = expand(TOP_DIR + '/peaks/clipper/{sample}.bed', sample=samples),
+        expand(TOP_DIR + "/outs/homer/{sample}.2/{sample}.2", sample=samples),
+        expand(TOP_DIR + "/peaks/clipper/filtered/fastas/{sample}.2.fa", sample=samples), 
+        expand(TOP_DIR + '/peaks/clipper/filtered/{sample}.2.bed', sample=samples),
+        expand(TOP_DIR + "/outs/homer/merged.{protein}.2/{protein}.2", protein=proteins),
     run:
         shell("echo Completed!")
 
 include: 'rules/references.smk'
 include: 'rules/read_preprocessing_and_mapping.smk'
-    
+
+
 #########################################################
 # Run clipper.
-#########################################################
+#########################################################s
+    
+rule call_homer:
+    input:
+        peak_fasta = TOP_DIR + "/peaks/clipper/filtered/fastas/{sample}.2.fa",
+        randoms = TOP_DIR + "/peaks/clipper/filtered/fastas/randomControls/{sample}.2.fa",
+    output:
+        homer_results = TOP_DIR + "/outs/homer/{sample}.2/{sample}.2",
+    log: TOP_DIR + "/outs/homer/logs/{sample}.2.log"
+    conda:
+        "envs/homer.yml"
+    shell:
+        "homer2 denovo -i {input.peak_fasta} -b {input.randoms} -len 6 -S 10 -strand + -o {output.homer_results} &> {log}"
 
+rule call_homer_merged:
+    input:
+        peak_fasta = TOP_DIR + "/peaks/clipper/filtered/fastas/merged.{protein}.2.fa",
+        randoms = TOP_DIR + "/peaks/clipper/filtered/fastas/randomControls/merged.{protein}.2.fa",
+    output:
+        homer_results = TOP_DIR + "/outs/homer/merged.{protein}.2/{protein}.2",
+    log:
+        TOP_DIR + "/outs/homer/logs/{protein}.2.log"
+    conda:
+        "envs/homer.yml"
+    shell:
+        "homer2 denovo -i {input.peak_fasta} -b {input.randoms} -len 6 -S 10 -strand + -o {output.homer_results} &> {log}"
+      
+rule intersect_peaks:  
+    input:
+        one = expand(TOP_DIR + '/peaks/clipper/filtered/{sample}.1.bed', sample=samples),
+        two = expand(TOP_DIR + '/peaks/clipper/filtered/{sample}.2.bed', sample=samples),
+        three = expand(TOP_DIR + '/peaks/clipper/filtered/{sample}.3.bed', sample=samples),
+    output:
+        one = expand(TOP_DIR + '/peaks/clipper/filtered/merged.{protein}.1.bed', protein=proteins),
+        two = expand(TOP_DIR + '/peaks/clipper/filtered/merged.{protein}.2.bed', protein=proteins),
+        three = expand(TOP_DIR + '/peaks/clipper/filtered/merged.{protein}.3.bed', protein=proteins),
+    run:
+        for protein in proteins:  # For each CLIP'd protein.
+            for level in ['1', '2', '3']:  # For each level of stringency in peak calling.
+                output_file = TOP_DIR + f'/peaks/clipper/filtered/merged.{protein}.{level}.bed'
+                _samples = [x for x in samples if x.split('_')[1]==protein]  # Replicate names.
+                print('---')
+                # Input replicate peak filenames.
+                _files = [TOP_DIR + f'/peaks/clipper/filtered/{_sample}.{level}.bed' for _sample in _samples]
+                print(protein, _samples)
+                
+                if len(_files) > 1:  # If multiple replicates for this protein...
+                    thresh = math.ceil(0.75 * len(_files))  # Minimum replicate number.
+                    filestring = " ".join(_files)
+                    output_file = TOP_DIR + f'/peaks/clipper/filtered/merged.{protein}.{level}.bed'
+                    
+                    # {{ is converted to { by snakemake (avoids snakemake interpreting {} itself).
+                    cmdstring = f"bedtools multiinter -i {filestring} | awk \'{{{{ if($4 >= {thresh}) {{{{ print }}}} }}}}\' | bedtools merge > {output_file}"
+                    shell(cmdstring)  # Produce merged file.
+                    
+                else:  # If only one replicate, just copy that as the merged file.
+                    shell(f"cp {_files[0]} {output_file}")
+
+rule write_fastas:
+    input:
+        bed = TOP_DIR + '/peaks/clipper/filtered/{sample}.2.bed'
+    output:
+        peak_fastas = TOP_DIR + "/peaks/clipper/filtered/fastas/{sample}.2.fa", 
+        randoms = TOP_DIR + "/peaks/clipper/filtered/fastas/randomControls/{sample}.2.fa",
+    run:
+        # -s: force strandedness.
+        shell("bedtools getfasta -fi " + config['genomic_fasta'] + " -bed {input.bed} -fo {output.peak_fastas} -s")
+        
+        if os.path.exists(output.peak_fastas):
+            with open(output.peak_fastas) as f:
+                seqs = [x for x in f.readlines() if x[0]!='>']
+                scripts.random_sequence.write_random_seqs(seqs, output.randoms)
+                
+rule write_fastas_merged:
+    input:
+        one = TOP_DIR + '/peaks/clipper/filtered/merged.{protein}.1.bed',
+        two = TOP_DIR + '/peaks/clipper/filtered/merged.{protein}.2.bed', 
+        three = TOP_DIR + '/peaks/clipper/filtered/merged.{protein}.3.bed', 
+    output:
+        peak_fa_1 = TOP_DIR + "/peaks/clipper/filtered/fastas/merged.{protein}.1.fa",
+        peak_fa_2 = TOP_DIR + "/peaks/clipper/filtered/fastas/merged.{protein}.2.fa", 
+        peak_fa_3 = TOP_DIR + "/peaks/clipper/filtered/fastas/merged.{protein}.3.fa", 
+        randoms_1 = TOP_DIR + "/peaks/clipper/filtered/fastas/randomControls/merged.{protein}.1.fa",
+        randoms_2 = TOP_DIR + "/peaks/clipper/filtered/fastas/randomControls/merged.{protein}.2.fa", 
+        randoms_3 = TOP_DIR + "/peaks/clipper/filtered/fastas/randomControls/merged.{protein}.3.fa", 
+    run:
+        # -s: force strandedness.
+        shell("bedtools getfasta -fi " + config['genomic_fasta'] + " -bed {input.one} -fo {output.peak_fa_1} -s")
+        shell("bedtools getfasta -fi " + config['genomic_fasta'] + " -bed {input.two} -fo {output.peak_fa_2} -s")
+        shell("bedtools getfasta -fi " + config['genomic_fasta'] + " -bed {input.three} -fo {output.peak_fa_3} -s")
+        
+        for peak_fasta, random_fa in [
+            (output.peak_fa_1, output.randoms_1),
+            (output.peak_fa_2, output.randoms_2),
+            (output.peak_fa_3, output.randoms_3)]:
+            
+            if os.path.exists(peak_fasta):
+                with open(peak_fasta) as f:
+                    seqs = [x for x in f.readlines() if x[0]!='>']
+                    scripts.random_sequence.write_random_seqs(seqs, random_fa)                
+        
 rule call_clipper:
     input:
         bam = SAMS_DIR + '/genome_only/{sample}.bam',
         bed12 = 'data/processed/repeats_and_longest_txpt_per_gene.bed',
     output:
-        bed = config['top_dir'] + '/peaks/clipper/{sample}.bed'
+        bed = TOP_DIR + '/peaks/clipper/{sample}.bed'
     conda:
         'clipper/environment3.yml'
+    threads: 8
     shell:
-        CLIPPER_PATH + " -b {input.bam} -o {output.bed} -s GRCh38_v29"
+        "if " + config['run_clipper'] + "; then " + CLIPPER_PATH + " -b {input.bam} -o {output.bed} -s GRCh38_v29;"
+        "else echo Skipped running clipper; fi"
 
+rule filter_clipper:
+    input:
+        bed = TOP_DIR + '/peaks/clipper/{sample}.bed'
+    output:
+        one = TOP_DIR + '/peaks/clipper/filtered/{sample}.1.bed',
+        two = TOP_DIR + '/peaks/clipper/filtered/{sample}.2.bed',
+        three = TOP_DIR + '/peaks/clipper/filtered/{sample}.3.bed',
+    run:
+        import scripts.filter_clipper
+        scripts.filter_clipper.filter_clipper(str(input.bed))
+        
 rule remove_non_chromosomal_reads:
     input:
         bam = SAMS_DIR + '/dedup/{sample}.bam',
@@ -171,14 +299,14 @@ rule reads_per_gene_using_gffutils_bam:
         gtf = "data/processed/repeats_and_longest_txpt_per_gene.db",
         bam = expand(SAMS_DIR + "/3end/{sample}.bam", sample=samples)
     output:
-        config['counts'].rstrip('/') + "/counts_transcripts.txt",
+        config['counts'].rstrip('/') + "/bam_3prime_counts_transcripts.txt",
     run:
         input_dir = SAMS_DIR + "/3end/"    
         shell("python scripts/reads_to_genes.py {input_dir} {input.gtf} {output}")
         
 rule featureCounts_on_bams:
     input:
-        bams = expand(SAMS_DIR + "/dedup/{sample}.bam", sample=samples),        
+        bams = expand(SAMS_DIR + "/genome_only/{sample}.bam", sample=samples),        
         gtf = "assets/reference/featureCounts_formatted.gtf",
     output:
         counts = config['counts'].rstrip('/') + "/featureCounts_on_bams.txt",
@@ -208,7 +336,7 @@ rule make_RNAs_object:
     input:
         gtf = "repeats_and_longest_txpt_per_gene.gff",
     output:
-        config['top_dir'].rstrip('/') + '/data/rna.data'
+        TOP_DIR.rstrip('/') + '/data/rna.data'
     run:
         # Make data/rna.data file to assign reads to genes.
         import scripts.rnaDataFileMaker
@@ -263,7 +391,7 @@ rule reads_per_gene_statistics_vs_controls:
 #########################################################
 # Mapped read format conversions.
 #########################################################            
-        
+"""
 rule bedGraphToBigWig:
     input:
         "data/processed/chrom.sizes",
@@ -314,4 +442,4 @@ rule bamToBigwig:
     shell:
         #"bamCoverage --binSize 10 -b {input} -o {output} -of bigwig"
         "bamCoverage --binSize 1 -b {input} -o {output} -of bigwig"
-        
+"""

@@ -1,0 +1,6 @@
+name: homer-snakemake-env
+channels:
+  - bioconda
+  - conda-forge
+dependencies:
+  - homer=4.11

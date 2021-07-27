@@ -9,3 +9,4 @@ STAR_index: /oak/stanford/groups/khavari/users/dfporter/pre_2021_projects/genome
 STAR: STAR
 clipper: /storage/khavari/data/dfporter/anaconda3/envs/clipper3/bin/clipper
 feature_gtf: assets/reference/gencode.v29.basic.annotation.gtf
+genomic_fasta: /oak/stanford/groups/khavari/users/dfporter/pre_2021_projects/genome/GRCh38.gencode.29/GRCh38.primary_assembly.genome.fa 

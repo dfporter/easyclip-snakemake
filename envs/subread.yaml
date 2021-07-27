@@ -1,0 +1,24 @@
+name: subread-env
+channels:
+  - conda-forge
+  - bioconda
+#  - defaults
+dependencies:
+  - subread=2.0.1
+  #- ucsc-bedgraphtobigwig 
+  #- openpyxl
+  #- homer
+ # - biopython>=1.74
+ # - bedtools>=2.29.2
+ # - pandas>=1.0.5
+ # - fastqc>=0.11.8
+ # - cutadapt>=2.4
+ # - picard>=2.20.7
+ # - bowtie2>=2.4.1
+ # - ucsc-bedgraphtobigwig>=377
+ # - samtools>=1.10
+ # - r-knitr>=1.29
+ # - awscli>=1.18.127
+ # - umi_tools
+ # - star
+ # - multiqc
