@@ -391,7 +391,7 @@ rule reads_per_gene_statistics_vs_controls:
 #########################################################
 # Mapped read format conversions.
 #########################################################            
-"""
+
 rule bedGraphToBigWig:
     input:
         "data/processed/chrom.sizes",
@@ -442,4 +442,3 @@ rule bamToBigwig:
     shell:
         #"bamCoverage --binSize 10 -b {input} -o {output} -of bigwig"
         "bamCoverage --binSize 1 -b {input} -o {output} -of bigwig"
-"""
