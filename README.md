@@ -55,7 +55,7 @@ To prevent re-running it, the config can be edited to not call peaks with clippe
 ```yaml
 run_clipper: false
 ```
-This needs to be a lower case false because it is a bash command.
+This needs to be a lower case false because it is used as a bash command to get around a idiosyncrasy of snakemake.
 
 You can also pass config options as command line arguments to snakemake:
 ```bash
