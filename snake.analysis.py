@@ -141,8 +141,6 @@ rule all:
         shell("echo Completed!")
 
 include: 'rules/references.smk'
-include: 'rules/read_preprocessing_and_mapping.smk'
-
 
 #########################################################
 # Run clipper.
@@ -247,6 +245,7 @@ rule write_fastas_merged:
                     seqs = [x for x in f.readlines() if x[0]!='>']
                     scripts.random_sequence.write_random_seqs(seqs, random_fa)                
         
+"""
 rule call_clipper:
     input:
         bam = SAMS_DIR + '/genome_only/{sample}.bam',
@@ -257,7 +256,9 @@ rule call_clipper:
         'clipper/environment3.yml'
     threads: 8
     shell:
-        CLIPPER_PATH + " -b {input.bam} -o {output.bed} -s GRCh38_v29"
+        "if " + config['run_clipper'] + "; then " + CLIPPER_PATH + " -b {input.bam} -o {output.bed} -s GRCh38_v29;"
+        "else echo Skipped running clipper; fi"
+"""
 
 rule filter_clipper:
     input:
