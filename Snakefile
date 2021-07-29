@@ -44,12 +44,6 @@ if ('top_dir' not in config) and ('name' in config):
 if ('STAR_index' in config) and ('STAR index' not in config):
     config['STAR index'] = config['STAR_index']
 
-# If run_clipper isn't given in the config (or is set to 'false'), the default is to not run clipper.
-if 'run_clipper' in config and (not config['run_clipper']):
-    config['run_clipper'] = 'false' # Lower case false because this is used as a string in a bash command.
-if 'run_clipper' in config and (config['run_clipper']!='false') and config['run_clipper']:
-    config['run_clipper'] = 'true' # Lower case false because this is used as a string in a bash command.
-
 # Set some default path values as relative to the top_dir specified in config.yaml.
 _to = lambda x: config['top_dir'].rstrip('/') + f'/{x}'
 defaults = {

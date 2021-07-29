@@ -1,6 +1,6 @@
 name: testdata
 top_dir: testdata
-scheme: testdata/scheme.txt
+scheme: testdata/samples.txt
 R1_fastq: testdata/fastq/raw/R1.fastq.gz
 R2_fastq: testdata/fastq/raw/R2.fastq.gz
 cutadapt_r1_adapter_seq_to_trim: AGATCGGAAGAGCGGTTCAGCAGGAATGCCGAGACCGATCTCGTATGCCGTCTTCTGCTT
@@ -9,4 +9,3 @@ STAR_index: /oak/stanford/groups/khavari/users/dfporter/pre_2021_projects/genome
 STAR: STAR
 clipper: /storage/khavari/data/dfporter/anaconda3/envs/clipper3/bin/clipper
 feature_gtf: assets/reference/gencode.v29.basic.annotation.gtf
-genomic_fasta: /oak/stanford/groups/khavari/users/dfporter/pre_2021_projects/genome/GRCh38.gencode.29/GRCh38.primary_assembly.genome.fa 

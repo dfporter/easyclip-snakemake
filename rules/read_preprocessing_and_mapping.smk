@@ -8,13 +8,14 @@ import scripts.split_bam
 
 rule mapping:
     input:
-        'done/preprocess_reads.done'
+        fq1 = FASTQ_DIR + '/ready_to_map/R1.fastq.gz',
+        fq2 = FASTQ_DIR + '/ready_to_map/R2.fastq.gz',
     output:
-        done = 'done/mapping.done',
         all_reads = SAMS_DIR + '/all_reads.bam',
+    threads:
+        8
     run:
         ex.mapping(clobber=True)
-        shell("touch {output.done}")
         
 rule dedup:
     input:
@@ -61,13 +62,6 @@ rule split_bam:
 # Unmapped read pre-processing.
 #########################################################   
 
-rule read_scheme:
-    output: "done/read_scheme.done"
-    run: 
-        ex.read_scheme()
-        #shell("mkdir done")
-        shell("touch {output}")
-
 rule move_umis:
     input:
         in1 = config['R1_fastq'],
@@ -75,6 +69,8 @@ rule move_umis:
     output:
         out1 = FASTQ_DIR + '/umis_moved/R1.fastq.gz',
         out2 = FASTQ_DIR + '/umis_moved/R2.fastq.gz',
+    threads:
+        8
     run:
         ex.read_scheme()
         
@@ -86,7 +82,7 @@ rule move_umis:
         basename2 = os.path.splitext(os.path.basename(input.in2))[0]
         cmd = 'cutadapt -A TACCCTTCGCTTCACACACAAGGGGAAAGAGTGTAGATCTCGGTGGTCGC' +\
         ' -a AGATCGGAAGAGCGGTTCAGCAGGAATGCCGAGACCGATCTCGTATGCCGTCTTCTGCTT' +\
-        ' --pair-filter=any -u 13 -U 3'
+        ' --pair-filter=any -u 13 -U 3 -j 0'
         cmd += r" --rename='{id}_{r1.cut_prefix}-{r2.cut_prefix}" + \
         f' --too-short-output {fq}/umis_moved/too_short/{basename1}.gz'
         cmd += f' --too-short-paired-output {fq}/umis_moved/too_short/{basename2}.gz'
@@ -114,7 +110,8 @@ rule cut:
     output:
         out1 = FASTQ_DIR + '/ready_to_map/R1.fastq.gz',
         out2 = FASTQ_DIR + '/ready_to_map/R2.fastq.gz',
-        done = 'done/preprocess_reads.done',
+    threads:
+        8
     run:
         ex.read_scheme()
         
@@ -124,7 +121,7 @@ rule cut:
         
         basename1 = os.path.splitext(os.path.basename(input.in1))[0]
         basename2 = os.path.splitext(os.path.basename(input.in2))[0]
-        cmd = 'cutadapt --pair-filter=any -U -13 -u -3' +\
+        cmd = 'cutadapt --pair-filter=any -U -13 -u -3 -j 0' +\
         f' --too-short-output {FASTQ_DIR}/ready_to_map/too_short/{basename1}.gz'
         cmd += f' --too-short-paired-output {FASTQ_DIR}/ready_to_map/too_short/{basename2}.gz'
         cmd += f' --minimum-length {min_length} -o {output.out1} -p {output.out2}'
@@ -134,5 +131,4 @@ rule cut:
         res = subprocess.check_output(cmd.split(' '))
         res = res.decode()
         
-        shell("touch {output.done}")
         

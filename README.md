@@ -25,15 +25,15 @@ $ conda activate easyclip-env
 Running the snakemake workflow with no arguments will run it on the testdata (placed in testdata/, with the config file config.yaml and the samples file testdata/samples.txt):
 
 ```
-$ snakemake -j <cpus> 
+$ snakemake -j <cpus> --use-conda 
 ```
 
 The workflow is split into three parts, in order:
 
 ```bash
-$ snakemake -j <cpus> -s snake.processing.py  # Raw fastq.gz to bam/bw/ect.
-$ snakemake -j <cpus> -s snake.clipper.py  # Run clipper to call peaks.
-$ snakemake -j <cpus> -s snake.analysis.py  # Analysis.
+$ snakemake -j <cpus> --use-conda -s snake.processing.py  # Raw fastq.gz to bam/bw/ect.
+$ snakemake -j <cpus> --use-conda -s snake.clipper.py  # Run clipper to call peaks.
+$ snakemake -j <cpus> --use-conda -s snake.analysis.py  # Analysis.
 ```
 The required inputs are a star genome index to map to the config.yaml file, the genomic fasta for that build, the samples.txt file, and raw fastq.gz files for read1 and read2.
 

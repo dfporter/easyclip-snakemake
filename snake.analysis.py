@@ -13,7 +13,7 @@ python setup.py install
 conda install -c bioconda samtools=1.6 --force-reinstall
 '''
 
-import os, sys, re, glob, pandas, importlib, shutil
+import os, sys, re, glob, pandas, importlib, shutil, math
 #from RepEnrich2 import RepEnrich2
 import scripts
 import scripts.exp
@@ -43,12 +43,6 @@ if ('top_dir' not in config) and ('name' in config):
 # A star index is required.   
 if ('STAR_index' in config) and ('STAR index' not in config):
     config['STAR index'] = config['STAR_index']
-
-# If run_clipper isn't given in the config (or is set to 'false'), the default is to not run clipper.
-if 'run_clipper' in config and (not config['run_clipper']):
-    config['run_clipper'] = 'false' # Lower case false because this is used as a string in a bash command.
-if 'run_clipper' in config and (config['run_clipper']!='false') and config['run_clipper']:
-    config['run_clipper'] = 'true' # Lower case false because this is used as a string in a bash command.
 
 # Set some default path values as relative to the top_dir specified in config.yaml.
 _to = lambda x: config['top_dir'].rstrip('/') + f'/{x}'
@@ -87,10 +81,14 @@ samples = [f"{exp}_{protein}_{l5_bc}_{l3_bc}" for exp,protein,l5_bc,l3_bc in zip
 
 proteins = list(set(df['Gene'])) 
 
+# Three levels of peak cutoffs.
+peak_cutoffs = [1, 2, 3]
+
 # Constrain sample wildcards to not contain '/'.
 wildcard_constraints:
     sample = "[^\/\.]+",
     protein= "[^\/\.]+",
+    peak_cutoff="[123]+",
 
 # Read the sample sheet into the exp object.
 ex.read_scheme(config['samples'])
@@ -131,12 +129,12 @@ rule all:
         #config['counts'].rstrip('/') + "/featureCounts_on_bams.txt",
         expand(SAMS_DIR + '/genome_only/{sample}.bam', sample=samples),
 
-        # Uncomment this to enable the use of clipper.
-        #bed = expand(TOP_DIR + '/peaks/clipper/{sample}.bed', sample=samples),
         expand(TOP_DIR + "/outs/homer/{sample}.2/{sample}.2", sample=samples),
         expand(TOP_DIR + "/peaks/clipper/filtered/fastas/{sample}.2.fa", sample=samples), 
         expand(TOP_DIR + '/peaks/clipper/filtered/{sample}.2.bed', sample=samples),
+        expand(TOP_DIR + "/outs/homer/merged.{protein}.1/{protein}.1", protein=proteins),
         expand(TOP_DIR + "/outs/homer/merged.{protein}.2/{protein}.2", protein=proteins),
+        expand(TOP_DIR + "/outs/homer/merged.{protein}.3/{protein}.3", protein=proteins),
     run:
         shell("echo Completed!")
 
@@ -148,11 +146,11 @@ include: 'rules/references.smk'
     
 rule call_homer:
     input:
-        peak_fasta = TOP_DIR + "/peaks/clipper/filtered/fastas/{sample}.2.fa",
-        randoms = TOP_DIR + "/peaks/clipper/filtered/fastas/randomControls/{sample}.2.fa",
+        peak_fasta = TOP_DIR + "/peaks/clipper/filtered/fastas/{sample}.{peak_cutoff}.fa",
+        randoms = TOP_DIR + "/peaks/clipper/filtered/fastas/randomControls/{sample}.{peak_cutoff}.fa",
     output:
-        homer_results = TOP_DIR + "/outs/homer/{sample}.2/{sample}.2",
-    log: TOP_DIR + "/outs/homer/logs/{sample}.2.log"
+        homer_results = TOP_DIR + "/outs/homer/{sample}.{peak_cutoff}/{sample}.{peak_cutoff}",
+    log: TOP_DIR + "/outs/homer/logs/{sample}.{peak_cutoff}.log"
     conda:
         "envs/homer.yml"
     shell:
@@ -160,12 +158,12 @@ rule call_homer:
 
 rule call_homer_merged:
     input:
-        peak_fasta = TOP_DIR + "/peaks/clipper/filtered/fastas/merged.{protein}.2.fa",
-        randoms = TOP_DIR + "/peaks/clipper/filtered/fastas/randomControls/merged.{protein}.2.fa",
+        peak_fasta = TOP_DIR + "/peaks/clipper/filtered/fastas/merged.{protein}.{peak_cutoff}.fa",
+        randoms = TOP_DIR + "/peaks/clipper/filtered/fastas/randomControls/merged.{protein}.{peak_cutoff}.fa",
     output:
-        homer_results = TOP_DIR + "/outs/homer/merged.{protein}.2/{protein}.2",
+        homer_results = TOP_DIR + "/outs/homer/merged.{protein}.{peak_cutoff}/{protein}.{peak_cutoff}",
     log:
-        TOP_DIR + "/outs/homer/logs/{protein}.2.log"
+        TOP_DIR + "/outs/homer/logs/{protein}.{peak_cutoff}.log"
     conda:
         "envs/homer.yml"
     shell:
@@ -204,10 +202,10 @@ rule intersect_peaks:
 
 rule write_fastas:
     input:
-        bed = TOP_DIR + '/peaks/clipper/filtered/{sample}.2.bed'
+        bed = TOP_DIR + '/peaks/clipper/filtered/{sample}.{peak_cutoff}.bed'
     output:
-        peak_fastas = TOP_DIR + "/peaks/clipper/filtered/fastas/{sample}.2.fa", 
-        randoms = TOP_DIR + "/peaks/clipper/filtered/fastas/randomControls/{sample}.2.fa",
+        peak_fastas = TOP_DIR + "/peaks/clipper/filtered/fastas/{sample}.{peak_cutoff}.fa", 
+        randoms = TOP_DIR + "/peaks/clipper/filtered/fastas/randomControls/{sample}.{peak_cutoff}.fa",
     run:
         # -s: force strandedness.
         shell("bedtools getfasta -fi " + config['genomic_fasta'] + " -bed {input.bed} -fo {output.peak_fastas} -s")
@@ -256,8 +254,7 @@ rule call_clipper:
         'clipper/environment3.yml'
     threads: 8
     shell:
-        "if " + config['run_clipper'] + "; then " + CLIPPER_PATH + " -b {input.bam} -o {output.bed} -s GRCh38_v29;"
-        "else echo Skipped running clipper; fi"
+        CLIPPER_PATH + " -b {input.bam} -o {output.bed} -s GRCh38_v29"
 """
 
 rule filter_clipper:
