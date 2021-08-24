@@ -1,11 +1,11 @@
-Experiment	Gene	Replicate	L3_BC	L5_BC	
-Exp91	A1CF	1	TCA	CTGATC	
-Exp91	A1CF-E34K	1	AGT	CTGATC	
-Exp92	A1CF	2	AAC	CTGATC	
-Exp92	A1CF-E34K	2	CAG	CTGATC	
-Exp91	FUBP1	1	TCA	GCTCAT	
-Exp91	FUBP1-R429C	1	AGT	GCTCAT	
-Exp91	KHDRBS2	1	AAC	AGCTAG	
-Exp91	KHDRBS2-R168C	1	AGT	AGCTAG	
-Exp92	KHDRBS2	2	CAG	AGCTAG	
-Exp92	KHDRBS2-R168C	2	TCA	AGCTAG	
+Experiment	Gene	Replicate	L3_BC	L5_BC	R1_fastq	R2_fastq
+Exp91	A1CF	1	TCA	CTGATC	All_R1.fastq.gz	All_R2.fastq.gz
+Exp91	A1CF-E34K	1	AGT	CTGATC	All_R1.fastq.gz	All_R2.fastq.gz
+Exp92	A1CF	2	AAC	CTGATC	All_R1.fastq.gz	All_R2.fastq.gz
+Exp92	A1CF-E34K	2	CAG	CTGATC	All_R1.fastq.gz	All_R2.fastq.gz
+Exp91	FUBP1	1	TCA	GCTCAT	All_R1.fastq.gz	All_R2.fastq.gz
+Exp91	FUBP1-R429C	1	AGT	GCTCAT	All_R1.fastq.gz	All_R2.fastq.gz
+Exp91	KHDRBS2	1	AAC	AGCTAG	All_R1.fastq.gz	All_R2.fastq.gz
+Exp91	KHDRBS2-R168C	1	AGT	AGCTAG	All_R1.fastq.gz	All_R2.fastq.gz
+Exp92	KHDRBS2	2	CAG	AGCTAG	All_R1.fastq.gz	All_R2.fastq.gz
+Exp92	KHDRBS2-R168C	2	TCA	AGCTAG	All_R1.fastq.gz	All_R2.fastq.gz
