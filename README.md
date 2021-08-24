@@ -108,7 +108,6 @@ The required inputs are a star genome index to map to the config.yaml file, the 
 The paths to input files are set by editing config.yaml.
 The snakefile can also be set to run a different config file by calling snakemake with a --configfile parameter.
 
-The format of the samples.txt file is given by demonstration in testdata/samples.txt. It must include an Experiment, Gene, Replicate, L3_BC and L5_BC column (and that is all).
 
 #### Authors
 dfporter, rmgarg
