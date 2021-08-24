@@ -1,5 +1,10 @@
 import pandas, re, os, collections, random
 
+class miniScheme():
+    def __init__(self, scheme_fname=''):
+        if scheme_fname != '':
+            self.read_scheme(scheme_fname=scheme_fname)
+            
 class scheme():
     
     def __init__(self, scheme_fname=''):

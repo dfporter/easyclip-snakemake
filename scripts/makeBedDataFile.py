@@ -33,7 +33,7 @@ class bedDataFileMaker():
         
         #bed_dir = '/Users/dfporter/pma/miseq/Runs/171210/sams/consensus/'
         #bedgraph_list = glob.glob(
-        #    '/Users/dfporter/pma/miseq/Runs/171210/sams/consensus/' + '/{prefix}*_deletions_+.wig'.format(prefix='ATCGTG')
+        #    '/Users/dfporter/pma/miseq/Runs/171210/sams/consensus/' + '/{prefix}*_deletions.+.wig'.format(prefix='ATCGTG')
         #    )  # PCBP1 in 171210
         if collapse_reads:
             print('Making backups of bed files...')
@@ -67,17 +67,19 @@ class bedDataFileMaker():
             )
         #print(beds.__dict__)
         
-        print("Made {} bedgraph data objects.".format(len(beds.bedgraphs)))
+        print(f"Made {len(beds.bedgraphs)} bedgraph data objects.")
         
         if not os.path.exists('data/'):
             os.system('mkdir data/')
         
+        print("bedDataFileMaker(): Attempting to serialize the data... This may take a long time...")
         beds.make_serializable()
         
+        print(f"bedDataFileMaker(): Writing to {output_data_filename}... This may take a long time...")
         with open(output_data_filename, 'wb') as fh:
             dill.dump(beds, file=fh)
         fh.close()
         
-        print("Wrote bed/bedgraph data file to {}.".format(output_data_filename))
+        print(f"bedDataFileMaker(): Wrote bed/bedgraph data file to {output_data_filename}.")
         
         return beds

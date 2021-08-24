@@ -81,7 +81,7 @@ class starCaller():
 
         cmd = paths['STAR']
         cmd += f" --genomeDir {paths['STAR_index']}"
-        cmd += f' --runThreadN {threads}'
+        cmd += f' --runThreadN {threads} --limitOutSJcollapsed 2000000'
         cmd += f' --readFilesIn {read1_fname} {read2_fname}'
         cmd += ' --outReadsUnmapped Fastx'
         if os.path.splitext(read1_fname)[-1] == '.gz':
@@ -91,19 +91,7 @@ class starCaller():
         # output in separate fasta/fastq files, Unmapped.out.mate1/2
         cmd += f" --outFileNamePrefix {paths['sams']}/genome."
         return cmd
-
-def fastaReader(fname: str):
-    """Read a file with ONLY ONE fasta sequence and return a dict of {name: sequence}."""
-
-    seq = []
-    with open(fname) as f:
-        for li in f:
-            if li[0] == '>':
-                continue
-            else:
-                seq.append(li.rstrip('\n'))
-    return {os.path.splitext(os.path.basename(fname))[0]: ''.join(seq)}
-
+    
 
 class mappingMethods():
     """General mapping methods for repeats and the genome.
@@ -113,20 +101,6 @@ class mappingMethods():
             fastqfile1: str = '', fastqfile2: str = ''
         Outputs:
             Calls the selected mapping method.
-
-    map_all_reads_separately_to_genome_and_repeats():
-        Parameters:
-            fastqfile1: str, fastqfile2: str
-        Outputs:
-            Creates the merged bam/sam file self.file_paths['sams'] + /all_reads.sam
-
-    map_to_genome_with_star(): fastqs to self.file_paths['sams'] + '/genome.Aligned.out.sam
-        Parameters:
-            read1_fname: str, read2_fname: str
-        Outputs: The filtered alignment.
-            self.file_paths['sams'] + '/genome.Aligned.out.sam
-            Returns a dict of some filepaths.
-
     """
 
     def mapping(
@@ -245,60 +219,26 @@ class mappingMethods():
             self.proclaim(f"mv {sf}/both.bam {sf}/all_reads.bam")
             self.proclaim(f"samtools index {sf}/all_reads.bam")
 
-    def map_to_genome_with_star(
-        self, read1_fname: str, read2_fname: str) -> None:
-        """Outputs to {self.file_paths['sams']}/genome/ and {self.file_paths['sams']}/.
-        Makes a STAR call, then saves the raw output with suffix .not_mapq_filtered.
-        Then uses samtools view to MAPQ>10 filter and output the filtered reads to 
-        genome.Aligned.out.sam. Further filtering finally outputs to genome.filtered.sam.
-        Returns a dict of file paths.
-        """
+    def merge_repeats_and_genome(self, sf, prefix):
+            # Combine the genomic reads and the reads mapping to repeats.
+            # -f forces the merge even if merged_filename exists.
+            cmd = f'samtools merge -f {sf}/{prefix}all_reads.bam {sf}/{prefix}genome.filtered.bam {sf}/{prefix}repeats.filtered.bam'
+            self.proclaim(cmd)
 
-        sf = self.file_paths['sams']
+            repeats, genome = f"{sf}/{prefix}repeats.filtered.bam", f"{sf}/{prefix}genome.filtered.bam"
+            self.proclaim(f"samtools view -o {sf}/{prefix}repeats.header -H {repeats}") 
+            self.proclaim(f"samtools view -o {sf}/{prefix}genome.header -H {genome}")
+            self.proclaim(f"samtools view -o {sf}/{prefix}repeats.filtered.sam {repeats}")
+            self.proclaim(f"samtools view -o {sf}/{prefix}genome.filtered.sam {genome}")
 
-        if 'STAR' not in self.file_paths:
-            self.file_paths['STAR'] = 'STAR'
-            print("Assuming STAR is on PATH.")
-
-        _starCaller = starCaller()
-
-        cmd = _starCaller.star_cmd_to_genome(
-            paths=self.file_paths,
-            read1_fname=read1_fname, read2_fname=read2_fname)
-
-        print(cmd, '\n')
-        subprocess.check_output(cmd.split(' '))
-        print("Finished mapping.")
-
-        cmd = 'mv {gen} {gen}.not_mapq_filtered'.format(gen=sf + '/genome.Aligned.out.sam')
-        subprocess.check_output(cmd.split(' '))
-
-        # The cmd below excludes secondaries (-F 256) and unmapped reads (-F 4). 
-        # It requires first mates (-f 64) and excludes low MAPQ (-q 10).
-        # It prints the header (-h) and outputs (-o) to a file rather than STDOUT.
-        cmd = 'samtools view -h -F 256 -f 64 -F 4 -q 10'
-        cmd += f" -o {sf + '/genome.filtered.bam'}" # Output filename
-        cmd += f" {sf + '/genome.Aligned.out.sam.not_mapq_filtered'}"  # Input.
-
-        print(cmd)
-        subprocess.check_output(cmd.split(' '))
-
-        unmapped_fastq_fname1 = sf + '/genome.Unmapped.out.mate1'
-        unmapped_fastq_fname2 = sf + '/genome.Unmapped.out.mate2'
-
-        # Sort and index the bam file.
-        cmd = f"samtools sort {sf + '/genome.filtered.bam'} > {sf + '/genome.filtered.bam.sorted'}"
-        self.proclaim(cmd)
-        cmd = f"mv {sf + '/genome.filtered.bam.sorted'} {sf + '/genome.filtered.bam'}"
-        self.proclaim(cmd)
-        cmd = f"samtools index {sf + '/genome.filtered.bam'}"
-        self.proclaim(cmd)
-
-        return {
-            'unmapped_fastq1': unmapped_fastq_fname1,
-            'unmapped_fastq2': unmapped_fastq_fname2,
-            'mapped_filtered_bam': self.file_paths['sams'] + '/genome.filtered.bam'
-            }
+            header = self.insert_sq_line(f"{sf}/{prefix}genome.header", self.grab_sq_line(f"{sf}/{prefix}repeats.header"))
+            with open(f"{sf}/{prefix}combined.header.sam", 'w') as f:
+                f.write(header)
+            self.proclaim(f"cat {sf}/{prefix}combined.header.sam {sf}/{prefix}genome.filtered.sam {sf}/{prefix}repeats.filtered.sam > {sf}/{prefix}both.filtered.sam")
+            self.proclaim(f"samtools view -o {sf}/{prefix}all_reads.bam {sf}/{prefix}both.filtered.sam")
+            self.proclaim(f"samtools sort -o {sf}/{prefix}both.bam {sf}/{prefix}all_reads.bam")
+            self.proclaim(f"mv {sf}/{prefix}both.bam {sf}/{prefix}all_reads.bam")
+            self.proclaim(f"samtools index {sf}/{prefix}all_reads.bam")
 
     def filter_sort_and_index_bam(self, samfname):
         base = os.path.splitext(samfname)[0]
@@ -325,6 +265,11 @@ class mappingMethods():
         cmd = f"samtools index {base}.filtered.bam"
         self.proclaim(cmd)
     
+    # Print and run a system command.
+    def proclaim(self, cmd):
+        print(cmd)
+        os.system(cmd)
+        
     def insert_sq_line(self, header_file, sq_line):
         line_n = 0
         sq_start = -1
@@ -343,152 +288,10 @@ class mappingMethods():
                     break
         lines = lines[:sq_end] + [sq_line] + lines[sq_end:]
         return ''.join(lines)
-
+    
     def grab_sq_line(self, samfname):
         with open(samfname) as f:
             for li in f:
                 if li[:3] == '@SQ':
                     break
         return li
-
-    def map_to_repeats_then_genome(self, fastqfile1: str, fastqfile2: str) -> None:
-        """Maps the given filenames and outputs to {self.file_paths['sams']}/repeats.
-        """
-        # Requires samtools to be on path.
-
-        #not_mapping = """
-        sf = self.file_paths['sams']
-        srm = f'{sf}/single_repeat_chromosome_mapping/'
-        os.makedirs(srm, exist_ok=True)
-
-#        cmd += f" --outFileNamePrefix {srm}/repeats."
-
-        # Output sam file is always '{PREFIX}Aligned.out.sam'
-        # Unmapped r1: {PREFIX}Unmapped.out.mate1
-        # Unmapped r2: {PREFIX}Unmapped.out.mate2
-
-        self.map_to_genome_with_star(
-            read1_fname=f'{srm}/repeats.Unmapped.out.mate1',
-            read2_fname=f'{srm}/repeats.Unmapped.out.mate2',
-        )
-        #"""
-        # Get the SQ and PG lines from the repeats header.
-        seqlines = ''
-        pg_line = ''
-        with open(f'{srm}/repeats.Aligned.out.sam') as fh:
-            for li in fh:
-                if li[:3] == '@SQ':
-                    seqlines += li
-                if li[:3] == '@PG':
-                    pg_line += li
-                if li[0] != '@':
-                    break
-
-        # Make sam copy of genomic map (replace this with just using pysam to read the bam.)
-        cmd = f'samtools view -h -o {sf}/genome.filtered.sam {sf}/genome.filtered.bam'
-        print(cmd)
-        os.system(cmd)
-
-        # Get all the header lines from the genomic sam.
-        hd_line = ''
-        post_seqlines = ''
-        with open(f'{sf}/genome.filtered.sam') as fh:
-            for li in fh:
-                if li[:3] == '@HD':
-                    hd_line = li
-                elif li[:3] == '@SQ':
-                    seqlines += li
-                elif li[0] == '@':
-                    post_seqlines += li
-                else:
-                    break
-
-        # Write a combined sam including the combined header and combined sam.
-        with open(f'{sf}/all_reads.sam', 'w') as fh:
-            fh.write(hd_line)
-            fh.write(seqlines)
-            fh.write(post_seqlines)
-            fh.write(pg_line)
-
-            with open(f'{sf}/genome.filtered.sam') as genomefh:
-                for li in genomefh:
-                    if li[0] == '@':
-                        continue
-                    fh.write(li)
-
-            with open(f'{srm}/repeats.Aligned.out.sam') as repeatsfh:
-                for li in repeatsfh:
-                    if li[0] == '@':
-                        continue
-                    fh.write(li)
-
-        self.split_collapse_and_make_beds_and_bedgraphs_from_sam(
-            input_sam_file=f'{sf}/all_reads.sam')
-
-    def split_collapse_and_make_beds_and_bedgraphs_from_sam(
-        self, input_sam_file: str = None) -> None:
-
-        if input_sam_file is None:
-            input_sam_file = self.file_paths['sams'] + '/all.filtered.sam'
-
-        if os.path.splitext(input_sam_file)[1] == '.bam':
-            as_sam = os.path.splitext(input_sam_file)[0] + '.sam'
-            cmd = f'samtools view -h -o {as_sam} {input_sam_file}'
-            print(cmd)
-            os.system(cmd)
-            input_sam_file = as_sam
-
-        # Split the giant sam file and make bed and bedgraph files.
-        split_sam_filenames = scripts.sam_to_bed_and_wig.split_sam(
-            input_sam_file,
-            self.file_paths['sams'] + '/split/')
-
-        # Collapse duplicates.
-        sam_dups_dir = self.file_paths['sams'] + '/before_duplicates_collapsed/'
-        os.makedirs(sam_dups_dir, exist_ok=True)
-
-        for sam_fname in split_sam_filenames:
-            dups_file = '{}/{}'.format(
-                sam_dups_dir, re.sub('.sam$', '.with_dups.sam', os.path.basename(sam_fname)))
-            os.system('mv {} {}'.format(sam_fname, dups_file))
-            scripts.collapse_duplicates.collapse_sam(dups_file, sam_fname)
-
-        # Make bed and bedgraph files.
-        #for sam_fname in split_sam_filenames:
-        for sam_fname in glob.glob(self.file_paths['sams'] + '/split/*sam'):
-            scripts.sam_to_bed_and_wig.sam_to_bed_and_wig(
-                sam_fname,
-                '{}/{}.bed'.format(
-                    self.file_paths['beds'],os.path.basename(sam_fname).split('.sam')[0]),
-                self.file_paths['beds']  # Wigs directory.
-                )
-
-    #def filter_sam(self, sam_fname, out_fname):
-    #    cmd = 'samtools view -h -F 256 -f 64 -F 4'
-    #    cmd += ' -o {} {}'.format(
-    #        out_fname, sam_fname)
-    #    print(cmd)
-    #    subprocess.check_output(cmd.split(' '))
-        # The above excludes secondaries (-F 256) and unmapped reads (-F 4), 
-        # and requires first mates (-f 64).
-        # It prints the header (-h) and outputs (-o) to a file rather than STDOUT.
-
-    def split_sam(self, sam_fname, out_dir):
-        scripts.sam_to_bed_and_wig.split_sam(sam_fname, out_dir=out_dir)
-
-    def cutadapt(self, fastq_input_dir=None, out_dir=None):
-        
-        if fastq_input_dir is None:
-            fastq_input_dir = self.file_paths['fastq'] + '/ready_to_map/'
-        
-        if out_dir is None:
-            out_dir = self.file_paths['fastq'] + '/ready_to_map/'
-        
-        scripts.clip_adapters.clip_using_cutadapt(fastq_input_dir, out_dir)
-
-        self.file_paths['cutadapt'] = out_dir
-
-    # Print and run a system command.
-    def proclaim(self, cmd):
-        print(cmd)
-        os.system(cmd)

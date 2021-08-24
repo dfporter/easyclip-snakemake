@@ -42,7 +42,8 @@ class BamWriter:
         bases = ['A', 'T', 'C', 'G', 'N']
 
         for barcode in list(self.barcodes):
-            l5, l3 = barcode.split('_')
+            l5, l3 = barcode.split('|')[0].split('__')
+            pcr_index = barcode.split('|')[-1]
             
             bc_list = list(l5)
 
@@ -52,32 +53,44 @@ class BamWriter:
                     new_l5_bc[pos] = base
                     new_l5_bc = ''.join(new_l5_bc)
                     
-#                    new_bc = f"{new_l5_bc}_{l3}"
-
                     l3_bc_list = list(l3)
                     for pos in range(len(l3)):
                         for l3_base in bases:
                             new_l3_bc = l3_bc_list[:]
                             new_l3_bc[pos] = l3_base
                             new_l3_bc = ''.join(new_l3_bc)
-                            new_bc = f"{new_l5_bc}_{new_l3_bc}"
+                            new_bc = f"{new_l5_bc}__{new_l3_bc}|{pcr_index}"
                             if new_bc not in self.outfiles:
                                 self.outfiles[new_bc] = self.outfiles[barcode]
 
     def write_record_to_barcode(self, rec, barcode):
-        if barcode not in self.barcodes:
+        if barcode not in self.outfiles.keys():
             barcode = 'unrecognized'
+
         if barcode not in self.outfiles:
             self.outfiles[barcode] = pysam.AlignmentFile(
                 f"{self.prefix}{barcode}.bam", "wb", template=self.alignment)
+            
         self.outfiles[barcode].write(rec)
 
     def open_bam(self, name):
         return pysam.AlignmentFile(
             name, "wb", template=self.alignment)
         
-def split_bam(input_bam, barcodes, barcode_to_fname, output_prefix):
+def split_bam(
+    input_bam: str, barcodes: list, barcode_to_fname: dict, output_prefix: str,
+    l5_inline_pattern="BBBBBBNNNNNNN", l3_inline_pattern="BBBBBNNNNN"):
     """Split a bam into separate bams based on barcodes in the read name.
+    input_bam: bam filename.
+    barcodes: list of strings, [L5BC_L3BC, L5BC_L3BC, ect.], found in the samples file.
+    barcode_to_fname: assigns each string of L5/L3 barcode pairs to a filename.
+    output_prefix: prefix for output filenames: {self.prefix}{barcode_to_fname[barcode]}.bam
+    
+    l5_inline_pattern/l3_inline_pattern: The L5_inline entry represents the 
+    barcode (B) and UMI (N) in the order it would be sequenced in read 1 
+    (that is, 6 barcode bases and then 7 UMI bases). The L3_inline entry is the same,
+    but in the order it would be sequenced from read 2. These values are from the
+    configfile.
     """
     
     if '/' in output_prefix:
@@ -85,19 +98,35 @@ def split_bam(input_bam, barcodes, barcode_to_fname, output_prefix):
 
     alignment = pysam.AlignmentFile(input_bam)
     
+    print(f"barcodes: {barcodes}")
     writer = BamWriter(
         alignment=alignment, barcodes=barcodes,
         barcode_to_fname=barcode_to_fname, prefix=output_prefix)
     
     recs = alignment.fetch()
-    # Read name suffix format: 3773_AGCTAGAAAATCG_AGT_ACT_CGATTTTCTAGCT
+    # Read name suffix format: 3773_AGCTAGAAAATCG_AGT
     # AGCTAGAAAATCG_AGT -> AGCTAG=L5 BC. AGT=L3 BC. AAAATCG=UMI.
-
+    
+    l5_bc_len = len(barcodes[0].split('|')[0].split('__')[0])
+    l3_bc_len = len(barcodes[0].split('|')[0].split('__')[1])
+    
+    l5_bc_pos = [pos for pos, base in enumerate(l5_inline_pattern) if base == 'B']
+    l3_bc_pos = [pos for pos, base in enumerate(l3_inline_pattern) if base == 'B']
         
     for rec in recs:
         try:
-            barcode = rec.query_name.split('_')[-1].split('-')
-            barcode = '_'.join([barcode[0][:6], barcode[1]])
+            try:
+                l5, l3 = rec.query_name.split('__')[-1].split('|')[0].split('-')
+            except:
+                print(rec.query_name)
+                sys.exit()
+            pcr_index = rec.query_name.split('__')[-1].split('|')[-1]
+            
+            l5 = ''.join([l5[i] for i in l5_bc_pos])
+            l3 = ''.join([l3[i] for i in l3_bc_pos])
+            barcode = f"{l5}__{l3}|{pcr_index}"
+            
+
             writer.write_record_to_barcode(rec=rec, barcode=barcode)
         except KeyError:
             pass
@@ -127,7 +156,7 @@ def split_bam(input_bam, barcodes, barcode_to_fname, output_prefix):
 if __name__ == '__main__':
     import pandas
     df = pandas.read_csv('testdata/samples.txt', sep='\t')
-    barcodes = ['_'.join([x,y]) for x,y in zip(df['L5_BC'], df['L3_BC'])]
+    barcodes = ['__'.join([x,y]) for x,y in zip(df['L5_BC'], df['L3_BC'])]
 
     scheme = scripts.scheme.scheme('testdata/samples.txt')
     barcode_to_fname = {

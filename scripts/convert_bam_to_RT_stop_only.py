@@ -13,11 +13,11 @@ sam.write(str(bam.header))
 for r in bam.fetch():
     
     # BAM: 0-based, SAM: 1-based.
-    if r.is_reverse: # Forward strand. I don't understand why.
+    if r.is_reverse: 
         query_sequence = r.query_sequence[-1] 
         query_length = 1
         ref_start = r.reference_start + 1 
-    else: # Reverse strand.
+    else: 
         query_sequence = r.query_sequence[0] 
         query_length = 1
         ref_start = r.reference_end 

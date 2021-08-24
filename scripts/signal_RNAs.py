@@ -216,6 +216,12 @@ class signal_RNAs():
                 # Roll a dice for reminder print statements.
                 _print = bool(random.randint(0, 1E6) == 1)
 
+                if _print:
+                    sorted_names = sorted(self.counts.keys(), key=lambda x: self.counts[x][fname])
+                    n_to_show = min([5, len(sorted_names)])
+                    print(f"So far, the top genes assigned to:")
+                    print("\n".join([f"{x}: {self.counts[x]}" for x in sorted_names[-n_to_show:]]))
+                    
                 # Translate chromosome names in the bedgraph to match chr\d if asked.
                 if translate_bed_numeric and (iv.chrom in bed_numeric):
                     _print and (print(f"{iv.chrom} -> chr{iv.chrom} (this note pops up every ~1/1E6 times)"))

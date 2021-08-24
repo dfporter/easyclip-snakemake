@@ -13,10 +13,11 @@ python setup.py install
 conda install -c bioconda samtools=1.6 --force-reinstall
 '''
 
-import os, sys, re, glob, pandas, importlib, shutil, math
-#from RepEnrich2 import RepEnrich2
+import os, sys, re, glob, pandas, importlib, shutil, math, pysam, pickle
+import numpy as np
 import scripts
 import scripts.exp
+import scripts.init_with_config
 import scripts.rnaDataFileMaker
 import scripts.make_repeats_chrom
 import scripts.split_bam
@@ -30,45 +31,10 @@ configfile: "config.yaml"
 # Set global path values and initialize exp object.
 #########################################################
 
-# The config.yaml must contain a name definition.
-if ('top_dir' not in config) and ('name' not in config):
-    raise ValueError(
-        f"Need name value in {configfile}. Prefer name & top_dir both set. top_dir=name when only name set.")
-
-# Set top_dir from name if not given.    
-if ('top_dir' not in config) and ('name' in config):
-    config['top_dir'] = config['name']
-    os.makedirs(config['top_dir'], exist_ok=True)
-
-# A star index is required.   
-if ('STAR_index' in config) and ('STAR index' not in config):
-    config['STAR index'] = config['STAR_index']
-
-# Set some default path values as relative to the top_dir specified in config.yaml.
-_to = lambda x: config['top_dir'].rstrip('/') + f'/{x}'
-defaults = {
-    'samples': _to('samples.txt'), 'beds': _to('beds'), 'fastq': _to('fastq'), 'sams': _to('sams'),
-    'bigwig': _to('bigwig'), 'bedgraph': _to('bedgraph'), 'counts': _to('counts.txt'), 'STAR': 'STAR',
-    'outs': _to('outs/'), 'counts': _to('outs/counts/'),
-    'scheme': _to('samples.txt'),
-    'run_clipper': 'false',  # Lower case false because this is used as a string in a bash command.
-}
-
-for key in [_ for _ in defaults.keys() if (_ not in config)]:
-    config[key] = defaults[key]
+config = scripts.init_with_config.init_with_config(config)
     
 # Create exp object for organizing some tasks.
 ex = scripts.exp.exp(name=config['name'], file_paths=config)
-
-# If a feature_gtf is not specified in the config.yaml, we give it a default
-# of assets/reference/gencode.v29.basic.annotation.gtf. The workflow will attempt
-# to download this file if it is not present. If the star index was made with a 
-# different annotation than gencode v29, some weird results might happen in
-# assigning reads to genes.
-if not os.path.exists(config['feature_gtf']):
-    print("feature gtf not found: ", config['feature_gtf'])
-    print("setting config['feature_gtf'] to match this default gtf: assets/reference/gencode.v29.basic.annotation.gtf")
-    config['feature_gtf'] = "assets/reference/gencode.v29.basic.annotation.gtf"
 
 # Read the samples.txt file. This defines barcodes, the studied protein, ect.
 df = pandas.read_csv(ex.file_paths['samples'], sep='\t')
@@ -76,8 +42,8 @@ df = pandas.read_csv(ex.file_paths['samples'], sep='\t')
 df['Gene'] = [re.sub(' ', '-', x) for x in df['Gene']]  # Get rid of spaces.
 
 # Define the samples list used throughout the workflow.
-samples = [f"{exp}_{protein}_{l5_bc}_{l3_bc}" for exp,protein,l5_bc,l3_bc in zip(
-    df['Experiment'], df['Gene'], df['L5_BC'], df['L3_BC'])]
+samples = [f"{exp}_{protein}_{rep}_{l5_bc}_{l3_bc}" for exp,protein,l5_bc,l3_bc,rep in zip(
+    df['Experiment'], df['Gene'], df['L5_BC'], df['L3_BC'], df['Replicate'])]
 
 proteins = list(set(df['Gene'])) 
 
@@ -89,6 +55,7 @@ wildcard_constraints:
     sample = "[^\/\.]+",
     protein= "[^\/\.]+",
     peak_cutoff="[123]+",
+    strand="[\+-]",
 
 # Read the sample sheet into the exp object.
 ex.read_scheme(config['samples'])
@@ -104,6 +71,26 @@ CLIPPER_PATH = "~/anaconda3/envs/clipper3/bin/clipper"
 if 'clipper' in config:
     CLIPPER_PATH = config['clipper']
     
+
+def protein_in_fname(fname):
+    if '/' in fname:
+        base = fname.split('/')[-1]
+        return '_'.join(base.split('_')[1:-3])
+    return '_'.join(fname.split('_')[1:-3])
+
+def control_bigwigs():
+    _df = pandas.read_csv("random_controls/samples.txt", sep='\t')
+    return [f"random_controls/bigwig/{exp}_{gene}_{l5}_{l3}.bigwig" for \
+            exp,gene,l5,l3 in zip(_df.Experiment, _df.Gene, _df.L5_BC, _df.L3_BC)]
+
+def control_bigwigs_3prime():
+    _df = pandas.read_csv("random_controls/samples.txt", sep='\t')
+    plus = [f"random_controls/bigwig/3prime/{exp}_{gene}_{l5}_{l3}.+.bigwig" for \
+            exp,gene,l5,l3 in zip(_df.Experiment, _df.Gene, _df.L5_BC, _df.L3_BC)]
+    minus = [f"random_controls/bigwig/3prime/{exp}_{gene}_{l5}_{l3}.-.bigwig" for \
+            exp,gene,l5,l3 in zip(_df.Experiment, _df.Gene, _df.L5_BC, _df.L3_BC)]
+    return plus + minus
+
 #########################################################
 # Begin rules.
 #########################################################
@@ -116,157 +103,281 @@ rule all:
         "assets/reference/featureCounts_formatted.gtf",
         "data/processed/features.db",
         "data/processed/repeats_and_longest_txpt_per_gene.bed",
-        ex.file_paths['R1_fastq'],
         SAMS_DIR + '/all_reads.bam',
-        FASTQ_DIR + '/umis_moved/R1.fastq.gz',
-        FASTQ_DIR + '/ready_to_map/R1.fastq.gz',
         expand(SAMS_DIR + "/split/{sample}.bam", sample=samples),
         expand(SAMS_DIR + "/dedup/{sample}.bam", sample=samples),
         #expand(BIGWIG + "/{sample}.bigwig", sample=samples),
         #expand(SAMS_DIR + "/3end/{sample}.bam", sample=samples),
-        config['counts'].rstrip('/') + "/bigwig_3prime_counts_transcripts.txt",
+        #config['counts'].rstrip('/') + "/bigwig_3prime_counts_transcripts.txt",
         #config['counts'].rstrip('/') + "/bam_3prime_counts_transcripts.txt",
         #config['counts'].rstrip('/') + "/featureCounts_on_bams.txt",
         expand(SAMS_DIR + '/genome_only/{sample}.bam', sample=samples),
-
-        expand(TOP_DIR + "/outs/homer/{sample}.2/{sample}.2", sample=samples),
-        expand(TOP_DIR + "/peaks/clipper/filtered/fastas/{sample}.2.fa", sample=samples), 
-        expand(TOP_DIR + '/peaks/clipper/filtered/{sample}.2.bed', sample=samples),
-        expand(TOP_DIR + "/outs/homer/merged.{protein}.1/{protein}.1", protein=proteins),
-        expand(TOP_DIR + "/outs/homer/merged.{protein}.2/{protein}.2", protein=proteins),
-        expand(TOP_DIR + "/outs/homer/merged.{protein}.3/{protein}.3", protein=proteins),
+        control_bigwigs(),
+        control_bigwigs_3prime(),
+        control_per_million = "random_controls/counts/reads_per_million.bedgraphs.txt",
+        control_counts = "random_controls/counts/counts.bedgraphs.txt",
+        rna_data = TOP_DIR + '/data/rna.data',
+        counts = TOP_DIR + '/outs/counts/ann_counts.bedgraphs.txt',
+        reads_per_million = TOP_DIR + '/outs/counts/reads_per_million.bedgraphs.txt',
+        pvals_per_read = TOP_DIR + "/tables/pvals_per_read.xlsx",
+        
+        per_read_xlsx = TOP_DIR + "/tables/RNA targets per read vs random non-RBPs.xlsx",
+        #per_protein_xlsx = TOP_DIR + "/tables/RNA targets per protein vs random non-RBPs.xlsx",
     run:
         shell("echo Completed!")
 
 include: 'rules/references.smk'
 
 #########################################################
-# Run clipper.
-#########################################################s
-    
-rule call_homer:
+# Old processing pipeline. 
+#########################################################  
+rule make_RNAs_object:
     input:
-        peak_fasta = TOP_DIR + "/peaks/clipper/filtered/fastas/{sample}.{peak_cutoff}.fa",
-        randoms = TOP_DIR + "/peaks/clipper/filtered/fastas/randomControls/{sample}.{peak_cutoff}.fa",
-    output:
-        homer_results = TOP_DIR + "/outs/homer/{sample}.{peak_cutoff}/{sample}.{peak_cutoff}",
-    log: TOP_DIR + "/outs/homer/logs/{sample}.{peak_cutoff}.log"
-    conda:
-        "envs/homer.yml"
-    shell:
-        "homer2 denovo -i {input.peak_fasta} -b {input.randoms} -len 6 -S 10 -strand + -o {output.homer_results} &> {log}"
+        gtf = "data/processed/repeats_and_longest_txpt_per_gene.gff",
 
-rule call_homer_merged:
-    input:
-        peak_fasta = TOP_DIR + "/peaks/clipper/filtered/fastas/merged.{protein}.{peak_cutoff}.fa",
-        randoms = TOP_DIR + "/peaks/clipper/filtered/fastas/randomControls/merged.{protein}.{peak_cutoff}.fa",
     output:
-        homer_results = TOP_DIR + "/outs/homer/merged.{protein}.{peak_cutoff}/{protein}.{peak_cutoff}",
-    log:
-        TOP_DIR + "/outs/homer/logs/{protein}.{peak_cutoff}.log"
-    conda:
-        "envs/homer.yml"
-    shell:
-        "homer2 denovo -i {input.peak_fasta} -b {input.randoms} -len 6 -S 10 -strand + -o {output.homer_results} &> {log}"
-    
-rule intersect_peaks:  
-    input:
-        one = expand(TOP_DIR + '/peaks/clipper/filtered/{sample}.1.bed', sample=samples),
-        two = expand(TOP_DIR + '/peaks/clipper/filtered/{sample}.2.bed', sample=samples),
-        three = expand(TOP_DIR + '/peaks/clipper/filtered/{sample}.3.bed', sample=samples),
-    output:
-        one = expand(TOP_DIR + '/peaks/clipper/filtered/merged.{protein}.1.bed', protein=proteins),
-        two = expand(TOP_DIR + '/peaks/clipper/filtered/merged.{protein}.2.bed', protein=proteins),
-        three = expand(TOP_DIR + '/peaks/clipper/filtered/merged.{protein}.3.bed', protein=proteins),
+        data = TOP_DIR + '/data/rna.data',
     run:
-        for protein in proteins:  # For each CLIP'd protein.
-            for level in ['1', '2', '3']:  # For each level of stringency in peak calling.
-                output_file = TOP_DIR + f'/peaks/clipper/filtered/merged.{protein}.{level}.bed'
-                _samples = [x for x in samples if x.split('_')[1]==protein]  # Replicate names.
-                print('---')
-                # Input replicate peak filenames.
-                _files = [TOP_DIR + f'/peaks/clipper/filtered/{_sample}.{level}.bed' for _sample in _samples]
-                print(protein, _samples)
-                
-                if len(_files) > 1:  # If multiple replicates for this protein...
-                    thresh = math.ceil(0.75 * len(_files))  # Minimum replicate number.
-                    filestring = " ".join(_files)
-                    output_file = TOP_DIR + f'/peaks/clipper/filtered/merged.{protein}.{level}.bed'
-                    
-                    # {{ is converted to { by snakemake (avoids snakemake interpreting {} itself).
-                    cmdstring = f"bedtools multiinter -i {filestring} | awk \'{{{{ if($4 >= {thresh}) {{{{ print }}}} }}}}\' | bedtools merge > {output_file}"
-                    shell(cmdstring)  # Produce merged file.
-                    
-                else:  # If only one replicate, just copy that as the merged file.
-                    shell(f"cp {_files[0]} {output_file}")
+        # Make data/rna.data file to assign reads to genes.
+        import scripts.rnaDataFileMaker
 
-rule write_fastas:
-    input:
-        bed = TOP_DIR + '/peaks/clipper/filtered/{sample}.{peak_cutoff}.bed'
-    output:
-        peak_fastas = TOP_DIR + "/peaks/clipper/filtered/fastas/{sample}.{peak_cutoff}.fa", 
-        randoms = TOP_DIR + "/peaks/clipper/filtered/fastas/randomControls/{sample}.{peak_cutoff}.fa",
-    run:
-        # -s: force strandedness.
-        shell("bedtools getfasta -fi " + config['genomic_fasta'] + " -bed {input.bed} -fo {output.peak_fastas} -s")
-        
-        if os.path.exists(output.peak_fastas):
-            with open(output.peak_fastas) as f:
-                seqs = [x for x in f.readlines() if x[0]!='>']
-                scripts.random_sequence.write_random_seqs(seqs, output.randoms)
-                
-rule write_fastas_merged:
-    input:
-        one = TOP_DIR + '/peaks/clipper/filtered/merged.{protein}.1.bed',
-        two = TOP_DIR + '/peaks/clipper/filtered/merged.{protein}.2.bed', 
-        three = TOP_DIR + '/peaks/clipper/filtered/merged.{protein}.3.bed', 
-    output:
-        peak_fa_1 = TOP_DIR + "/peaks/clipper/filtered/fastas/merged.{protein}.1.fa",
-        peak_fa_2 = TOP_DIR + "/peaks/clipper/filtered/fastas/merged.{protein}.2.fa", 
-        peak_fa_3 = TOP_DIR + "/peaks/clipper/filtered/fastas/merged.{protein}.3.fa", 
-        randoms_1 = TOP_DIR + "/peaks/clipper/filtered/fastas/randomControls/merged.{protein}.1.fa",
-        randoms_2 = TOP_DIR + "/peaks/clipper/filtered/fastas/randomControls/merged.{protein}.2.fa", 
-        randoms_3 = TOP_DIR + "/peaks/clipper/filtered/fastas/randomControls/merged.{protein}.3.fa", 
-    run:
-        # -s: force strandedness.
-        shell("bedtools getfasta -fi " + config['genomic_fasta'] + " -bed {input.one} -fo {output.peak_fa_1} -s")
-        shell("bedtools getfasta -fi " + config['genomic_fasta'] + " -bed {input.two} -fo {output.peak_fa_2} -s")
-        shell("bedtools getfasta -fi " + config['genomic_fasta'] + " -bed {input.three} -fo {output.peak_fa_3} -s")
-        
-        for peak_fasta, random_fa in [
-            (output.peak_fa_1, output.randoms_1),
-            (output.peak_fa_2, output.randoms_2),
-            (output.peak_fa_3, output.randoms_3)]:
-            
-            if os.path.exists(peak_fasta):
-                with open(peak_fasta) as f:
-                    seqs = [x for x in f.readlines() if x[0]!='>']
-                    scripts.random_sequence.write_random_seqs(seqs, random_fa)                
-        
-"""
-rule call_clipper:
-    input:
-        bam = SAMS_DIR + '/genome_only/{sample}.bam',
-        bed12 = 'data/processed/repeats_and_longest_txpt_per_gene.bed',
-    output:
-        bed = TOP_DIR + '/peaks/clipper/{sample}.bed'
-    conda:
-        'clipper/environment3.yml'
-    threads: 8
-    shell:
-        CLIPPER_PATH + " -b {input.bam} -o {output.bed} -s GRCh38_v29"
-"""
+        maker = scripts.rnaDataFileMaker.rnaDataFileMaker()
+        RNAs = maker.make_from_gtf_file(
+            gtf_filename=str(input.gtf), output_data_filename=str(output.data))
+        # -> outputs data/rna.data. 
+        # This holds gtf object information - just regions, really.
 
-rule filter_clipper:
+rule raw_counts_file_from_bedgraph:
     input:
-        bed = TOP_DIR + '/peaks/clipper/{sample}.bed'
+        data = TOP_DIR + '/data/rna.data',
+        # Bedgraphs. wig extension so IGV loads.
+        plus = expand(ex.file_paths['bedgraph'].rstrip('/') + "/{sample}.+.wig",  sample=samples),
+        minus = expand(ex.file_paths['bedgraph'].rstrip('/') + "/{sample}.-.wig", sample=samples),
     output:
-        one = TOP_DIR + '/peaks/clipper/filtered/{sample}.1.bed',
-        two = TOP_DIR + '/peaks/clipper/filtered/{sample}.2.bed',
-        three = TOP_DIR + '/peaks/clipper/filtered/{sample}.3.bed',
+        counts = TOP_DIR + '/outs/counts/counts.bedgraphs.txt'
     run:
-        import scripts.filter_clipper
-        scripts.filter_clipper.filter_clipper(str(input.bed))
+        RNAs = pickle.load(open(str(input.data), 'rb'))
+
+        # Outputs a data/bed_x.data file that holds signal, w/o RNA information:
+        # Assigns signal to genes and writes raw counts.txt:
+        ex.make_scheme_signal_RNA_data_files(
+            rna_data_object=RNAs, no_clobber=True, counts_fname=str(output.counts))
+        
+rule total_read_numbers:
+    input:
+        plus = expand(ex.file_paths['bedgraph'].rstrip('/') + "/{sample}.+.wig",  sample=samples),
+        minus = expand(ex.file_paths['bedgraph'].rstrip('/') + "/{sample}.-.wig", sample=samples),
+    output:
+        total_reads = config['data']+"/total_read_numbers.txt",
+    run:
+        import scripts.total_read_numbers
+        scripts.total_read_numbers.total_read_numbers(
+            folder=ex.file_paths['bedgraph'], outfile=str(output.total_reads))
+        
+rule counts_files:
+    input:
+        counts = TOP_DIR + '/outs/counts/counts.bedgraphs.txt',
+        gtf = "data/processed/repeats_and_longest_txpt_per_gene.gff",
+        total_reads = config['data']+"/total_read_numbers.txt",
+    output:
+        counts = TOP_DIR + '/outs/counts/ann_counts.bedgraphs.txt',
+        reads_per_million = TOP_DIR + '/outs/counts/reads_per_million.bedgraphs.txt',
+    run:
+        import scripts.readsPerGene
+        from scripts.readsPerGene import rawReadsPerGene, readsPerMillion
+        
+        rpg = rawReadsPerGene(str(input.counts), scheme_filename=config['samples'])
+        rpg.add_biotypes_column(gtf_filename=str(input.gtf))
+        
+        # Write the biotypes-added raw counts.
+        rpg.df.to_csv(str(output.counts), sep='\t')
+
+        rpm = readsPerMillion(rpg, load_total_read_numbers=str(input.total_reads))
+        
+        # Write the reads per million file.
+        rpm.df.to_csv(str(output.reads_per_million), sep='\t')
+
+rule combine_pvals_and_other_gene_information:
+    input:
+        pvals_per_read = TOP_DIR + "/tables/pvals_per_read.xlsx",
+        counts = TOP_DIR + '/outs/counts/ann_counts.bedgraphs.txt',
+        reads_per_million = TOP_DIR + '/outs/counts/reads_per_million.bedgraphs.txt',
+        total_reads = config['data']+"/total_read_numbers.txt",
+    output:
+        per_read_xlsx = TOP_DIR + "/tables/RNA targets per read vs random non-RBPs.xlsx",
+    run:
+        import scripts.readsPerGene
+        from scripts.readsPerGene import rawReadsPerGene, readsPerMillion
+        raw_reads = rawReadsPerGene(str(input.counts), scheme_filename=config['samples'])
+        per_million = readsPerMillion(raw_reads, load_total_read_numbers=str(input.total_reads))
+        
+        raw_means_df = raw_reads.average_by_protein()
+        
+        col_order = ["Gene/exon-or-intron", "Gene", "Exon or intron"]
+        
+        raw_means_df.columns = [x + " (# reads)" for x in raw_means_df.columns]
+        raw_means_df['Gene'] = raw_means_df.index
+        
+        
+        per_million_means_df = per_million.average_by_protein()        
+        per_million_means_df.columns = [x + " (reads/million)" for x in per_million_means_df.columns]
+        per_million_means_df['Gene'] = per_million_means_df.index
+        
+        pvals_df = pandas.read_excel(str(input.pvals_per_read), index_col=0)
+        pvals_df['Gene'] = pvals_df.index
+        pvals_df.columns = [x + " (FDR)" if x!='Gene' else x for x in pvals_df.columns]
+        
+        col_order += [x for x in pvals_df.columns if x!='Gene']
+        col_order += [x for x in raw_means_df.columns if x!='Gene']
+        col_order += [x for x in per_million_means_df.columns if x!='Gene']
+        
+        pvals_df = pvals_df.merge(raw_means_df, left_on='Gene', right_on='Gene', how='inner')
+        print(pvals_df)
+        print('-\n', per_million_means_df)
+        pvals_df = pvals_df.merge(per_million_means_df, left_on='Gene', right_on='Gene', how='inner')                            
+        
+        
+        pvals_df["Gene/exon-or-intron"] = pvals_df["Gene"]
+        
+        pvals_df["Gene"] = [x.split("::")[0] for x in pvals_df["Gene/exon-or-intron"]]
+        pvals_df["Exon or intron"] = [x.split("::")[-1] for x in pvals_df["Gene/exon-or-intron"]]
+        pvals_df = pvals_df.loc[:, col_order]
+        print(pvals_df)
+        
+        pvals_df.to_excel(str(output.per_read_xlsx), index=False)
+        
+        
+rule reads_per_gene_statistics_vs_controls:
+    input:
+        counts = TOP_DIR + '/outs/counts/counts.bedgraphs.txt',
+        random_counts = 'random_controls/counts/counts.bedgraphs.txt',
+    output:
+        pvals_per_read = TOP_DIR + "/tables/pvals_per_read.xlsx",
+    run:
+        import scripts.negativeCounts
+        import scripts.positiveCounts
+        import scripts.statsForCountsNB
+        
+        from types import SimpleNamespace
+        
+        negative_metadata = SimpleNamespace(**{
+            'scheme_file_with_random_proteins': 'random_controls/samples.txt',
+            'top_dir': 'random_controls',
+            'ann_counts_file': 'random_controls/counts/counts.bedgraphs.txt',
+            'random_proteins': list(set(pandas.read_csv('random_controls/samples.txt', sep='\t')['Gene'])),
+        })
+
+        positive_metadata = SimpleNamespace(**{
+            'scheme_file': ex.file_paths["samples"],
+            'top_dir': TOP_DIR,
+            'bed_file_dir': ex.file_paths['bedgraph'].rstrip('/'),
+            'ann_counts_file': str(input.counts),
+            'positive_proteins': proteins,
+        })
+ 
+        print(positive_metadata)
+        print(negative_metadata)
+        # If never run before:
+        negatives = scripts.negativeCounts.negativeCounts(
+            negative_metadata)#, xl_rate_fname='/Users/dp/pma/percentCrosslinked.xlsx')
+
+        # Optional: write_txt=True to write some txt's of the data.
+        negatives.save(write_object=True, write_txt=True)
+
+        # If loading:
+        #negatives = scripts.negativeCounts.negativeCounts.load()
+
+        # If never run before:
+        positives = scripts.positiveCounts.positiveCounts(positive_metadata)
+
+        positives.save(write_object=True, write_txt=True)
+
+        # If loading:
+        #positives = scripts.positiveCounts.positiveCounts.load()
+
+        #nb = scripts.statsForCountsNB.statsForCountsNB.load()
+        nb = scripts.statsForCountsNB.statsForCountsNB(
+            negatives=negatives, positives=positives, data_dir=TOP_DIR + '/data/')
+        nb.calculate_pvalues(which='per_read')
+        
+        # Default: outfname = f'{self.positives.metadata.top_dir}/tables/pvals_{which}.xlsx'
+        nb.write_pvals_single_file(which='per_read', outfname=str(output.pvals_per_read))
+        #nb.write_targets(which='per_read', outfname=str(output.pvals_per_read))
+        #nb.calculate_pvalues(which='per_protein')
+        #nb.write_targets(which='per_protein', outfname='default')
+        
+        # Writes to f"{self.positives.metadata.data_folder}/stats.dill"
+        nb.save(TOP_DIR + '/data/stats.dill')
+        
+        
+        
+#########################################################
+# Filter peaks overlapping ncRNA.
+#########################################################
+
+
+rule make_ncRNA_gtf:
+    input:
+        gtf = "assets/reference/only_tsl_1_and_NA.gtf",
+    output:
+        ncRNA = "data/processed/ncRNA.only_tsl1_and_NA.bed",
+        coding = "data/processed/mRNA.only_tsl1_and_NA.bed",
+    run:
+        df = pandas.read_csv(input.gtf, comment='#', sep='\t', header=None)
+        df['biotype'] = [re.search('transcript_type "([^"]+)"', s) for s in df[8]]
+        df['biotype'] = [str(s) if s==None else s.group(1) for s in df['biotype']]
+        df['coding'] = [True if x=='protein_coding' else False for x in df.biotype]
+
+        nc_df = df[~df['coding']]
+        coding = df[df['coding']]
+
+        nc_df.loc[:, [0, 3, 4, 8, 5, 6]].to_csv(output.ncRNA, sep='\t', header=None, index=None)
+        coding.loc[:, [0, 3, 4, 8, 5, 6]].to_csv(output.coding, sep='\t', header=None, index=None)
+
+
+def raw_peak_files_of_protein(wildcards):
+    _sample_names = [x for x in samples if protein_in_fname(x).upper()==wildcards.protein.upper()]
+    return [TOP_DIR + f'/peaks/clipper/{x}.bed' for x in _sample_names]
+
+def assign_to_gene_and_add_height(bed_fname, bamfnames):        
+    df = pandas.read_csv(bed_fname, sep='\t', header=None)
+    df['Gene'] = [m.group(1) if (m := re.search('gene_name "([^"]+)"', x)) is not None else '.' for x in df[9]]
+    df['len'] = [b-a for a,b in zip(df[1], df[2])]
+
+    df = df[df['Gene']!='.']
+    df = df[df['len']>0]
+
+    bamfiles = {bam_fname:pysam.AlignmentFile(bam_fname, "rb" ) for bam_fname in bamfnames}
+
+    for bam_fname, bam_fh in bamfiles.items():
+        df[f'max_depth|{bam_fname}'] = [
+            np.max(np.sum(bam_fh.count_coverage(chrm, start, end), axis=0)) for chrm,start,end in zip(df[0], df[1], df[2])
+        ]
+
+    [bamfh.close() for bamfh in bamfiles.values()]
+
+    if len(bamfnames) > 1:
+        cols = [x for x in df.columns if 'max_depth|' in str(x)]
+        df['max_depth_all'] = df.loc[:, cols].apply(np.nanmean, axis=1)#[  np.nanmean(arr) for arr in df.loc[:,cols].values  ]
+    else:
+        df['max_depth_all'] = df[f'max_depth|{bamfnames[0]}']
+        
+    df = df.sort_values(by='max_depth_all', ascending=False)
+
+    df = df.drop_duplicates(subset=[0, 1, 2, 'Gene'], keep='first')
+
+    return df
+     
+def bam_files_of_protein_wildcards(wildcards):
+    _sample_names = [x for x in samples if protein_in_fname(x).upper()==wildcards.protein.upper()]
+    return [TOP_DIR + f'/sams/dedup/{x}.bam' for x in _sample_names]
+
+def bam_files_of_protein(protein):
+    _sample_names = [x for x in samples if protein_in_fname(x).upper()==protein.upper()]
+    return [TOP_DIR + f'/sams/dedup/{x}.bam' for x in _sample_names]  
+
+
+
         
 rule remove_non_chromosomal_reads:
     input:
@@ -326,64 +437,47 @@ rule subset_gtf_to_only_tsl1_and_NA:
     shell:
         "python scripts/subset_gtf_to_only_tsl1_and_NA.py {input} {output}"
 
-#########################################################
-# Old processing pipeline. Not run in this version.
-#########################################################  
-rule make_RNAs_object:
-    input:
-        gtf = "repeats_and_longest_txpt_per_gene.gff",
+
+
+rule download_control_data:
     output:
-        TOP_DIR.rstrip('/') + '/data/rna.data'
+        per_million = "random_controls/counts/reads_per_million.bedgraphs.txt",
+        counts = "random_controls/counts/counts.bedgraphs.txt",
+        bigwigs = control_bigwigs(),
+        bigwig_3prime = control_bigwigs_3prime(),
     run:
-        # Make data/rna.data file to assign reads to genes.
-        import scripts.rnaDataFileMaker
 
-        maker = scripts.rnaDataFileMaker.rnaDataFileMaker()
-        RNAs = maker.make_from_gtf_file(gtf_filename=str(input.gtf))
-        # -> outputs data/rna.data. 
-        # This holds gtf object information - just regions, really.
+        os.makedirs("random_controls/bigwig/3prime", exist_ok=True)
 
-        # Make counts file.
-        # Outputs a data/bed_x.data file that holds signal, w/o RNA information:
-        ex.make_signal_data_file()
-        # Assigns signal to genes and writes counts.txt:
-        ex.make_scheme_signal_RNA_data_files(rna_data_object=RNAs)
-
-        # Make ann_counts.txt file. This has simplified
-        # column names and biotypes.
-        ex.annotate_counts_file()
-    
-rule reads_per_gene_statistics_vs_controls:
-    run:
-        import scripts.negativeCounts
-        import scripts.positiveCounts
-        import scripts.statsForCountsNB
-        # If never run before:
-        negatives = scripts.negativeCounts.negativeCounts(
-            negative_metadata)#, xl_rate_fname='/Users/dp/pma/percentCrosslinked.xlsx')
-
-        # Optional: write_txt=True to write some txt's of the data.
-        negatives.save(write_object=True, write_txt=True)
-
-        # If loading:
-        negatives = scripts.negativeCounts.negativeCounts.load()
-
-        # If never run before:
-        positives = scripts.positiveCounts.positiveCounts(
-            positive_metadata)#, xl_rate_fname='/Users/dp/pma/percentCrosslinked.xlsx')
-        positives.save(write_object=True, write_txt=True)
-
-        # If loading:
-        positives = scripts.positiveCounts.positiveCounts.load()
-
-        #nb = scripts.statsForCountsNB.statsForCountsNB.load()
-        nb = scripts.statsForCountsNB.statsForCountsNB(
-            negatives=negatives, positives=positives, data_dir=positive_metadata.top_dir + '/data/')
-        nb.calculate_pvalues(which='per_read')
-        nb.write_targets(which='per_read', outfname='default')
-        nb.calculate_pvalues(which='per_protein')
-        nb.write_targets(which='per_protein', outfname='default')
-        nb.save()
+        shell(f"wget http://khavarilab.stanford.edu/s/random_non_RBP_control_countstar.gz")
+        shell("mv random_non_RBP_control_countstar.gz random_non_RBP_control_counts.tar.gz")
+        shell("tar -xf random_non_RBP_control_counts.tar.gz -C random_controls/counts/")
+        shell("mv random_controls/counts/counts/* random_controls/counts/")
+        shell("rmdir random_controls/counts/counts/")
+        
+        shell(f"wget http://khavarilab.stanford.edu/s/random_non_RBP_control_bigwig_cDNA_end_1tar.gz")
+        shell("mv random_non_RBP_control_bigwig_cDNA_end_1tar.gz random_non_RBP_control_bigwig_cDNA_end_1.tar.gz")
+        shell("tar -xf random_non_RBP_control_bigwig_cDNA_end_1.tar.gz -C random_controls/bigwig/3prime/")
+        shell("mv random_controls/bigwig/3prime/bigwig_3prime_1/* random_controls/bigwig/3prime/")
+        shell("rmdir random_controls/bigwig/3prime/bigwig_3prime_1/")
+        
+        shell(f"wget http://khavarilab.stanford.edu/s/random_non_RBP_control_bigwig_cDNA_end_2tar.gz")
+        shell("mv random_non_RBP_control_bigwig_cDNA_end_2tar.gz random_non_RBP_control_bigwig_cDNA_end_2.tar.gz")
+        shell("tar -xf random_non_RBP_control_bigwig_cDNA_end_2.tar.gz -C random_controls/bigwig/3prime/")
+        shell("mv random_controls/bigwig/3prime/bigwig_3prime_2/* random_controls/bigwig/3prime/")
+        shell("rmdir random_controls/bigwig/3prime/bigwig_3prime_2/")
+        
+        shell(f"wget http://khavarilab.stanford.edu/s/random_non_RBP_control_bigwigs_1tar.gz")
+        shell("mv random_non_RBP_control_bigwigs_1tar.gz random_non_RBP_control_bigwigs_1.tar.gz")
+        shell("tar -xf random_non_RBP_control_bigwigs_1.tar.gz -C random_controls/bigwig/")
+        shell("mv random_controls/bigwig/bigwig_group1/* random_controls/bigwig/")
+        shell("rmdir random_controls/bigwig/bigwig_group1/")
+        
+        shell(f"wget http://khavarilab.stanford.edu/s/random_non_RBP_control_bigwigs_2tar.gz")
+        shell("mv random_non_RBP_control_bigwigs_2tar.gz random_non_RBP_control_bigwigs_2.tar.gz")
+        shell("tar -xf random_non_RBP_control_bigwigs_2.tar.gz -C random_controls/bigwig/")
+        shell("mv random_controls/bigwig/bigwig_group2/* random_controls/bigwig/")
+        shell("rmdir random_controls/bigwig/bigwig_group2/")
         
 #########################################################
 # Mapped read format conversions.

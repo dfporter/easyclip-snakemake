@@ -83,5 +83,5 @@ class positiveCounts(scripts.annCounts.annCounts):
         with open(f'{self.metadata.data_folder}/logs/datasets_included_in_positiveCounts_object.py', 'w'
             ) as f:
             f.write(
-                'datasets_in_positiveCounts = ' + str(list(self.reads_per_protein.df.columns)) + '\n')
+                'datasets_in_positiveCounts = ' + str(list(self.reads_per_million.df.columns)) + '\n')
 

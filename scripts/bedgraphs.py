@@ -74,7 +74,7 @@ class set_of_bedgraphs():
         
         self.bedgraphs = {}
         
-        print(f"Creating bedgrapsh.set_of_bedgraphs (**kwargs = {kwargs})...")
+        print(f"Creating bedgraphs.set_of_bedgraphs (**kwargs = {kwargs})...")
         if bedgraphs_list is not None:
             for fname in bedgraphs_list:
                 if fname[-5:] == '-.wig':
@@ -91,10 +91,10 @@ class set_of_bedgraphs():
             self.bed_folder = bed_folder
             
         if bedgraphs_folder is not None:
-            for fname in glob.glob(bedgraphs_folder + '/*_+.wig'):
+            for fname in glob.glob(bedgraphs_folder + '/*.+.wig'):
                 self.bedgraphs[fname] = bedgraph(fname=fname, **kwargs)
                 
-            if len(glob.glob(bedgraphs_folder + '/*_+.wig')) < 1:
+            if len(glob.glob(bedgraphs_folder + '/*.+.wig')) < 1:
                 print("WARNING: did not find any wig/bedgraph files in bedgraphs folder {}".format(bedgraphs_folder))
                 
     def total_area_under_curve(self, verbose=False):
@@ -125,8 +125,8 @@ class set_of_bedgraphs():
             out_fname = top_dir + '/' + os.path.basename(bedfname).split('.')[0]
             out_fname = out_fname.replace('_+', '')
             out_fname = out_fname.replace('_-', '')
-            bedgraph.ga.write_bedgraph_file(out_fname + '_+.wig', strand='+')
-            bedgraph.ga.write_bedgraph_file(out_fname + '_-.wig', strand='-')
+            bedgraph.ga.write_bedgraph_file(out_fname + '.+.wig', strand='+')
+            bedgraph.ga.write_bedgraph_file(out_fname + '.-.wig', strand='-')
             
 
 def for_split_lines(fname, skip_first_line=False):
@@ -152,8 +152,11 @@ def chromosomes(fname='/opt/genomes/gencode.v29/GRCh38.primary_assembly.genome.f
     return chrom
 
 def read_bedgraphs(
-        fname='/Users/dfporter/pma/miseq/Runs/170830/sams/consensus/GTCGTC_TCA_deletions_+.wig',
+        fname='/Users/dfporter/pma/miseq/Runs/170830/sams/consensus/GTCGTC_TCA_deletions.+.wig',
         **kwargs):
+    """Input filename is always the + strand, with the suffix .+.wig.
+    The - strand file is read second, with the assumed filename being the same except for the suffix .-.wig.
+    """
     
     print(f'read_bedgraphs({fname}), **kwargs={kwargs}')
     if 'verbose' in kwargs and kwargs['verbose']:
@@ -181,7 +184,7 @@ def read_bedgraphs(
             if line_n >= use_first_n_lines:
                 break  # If you found this comment, email me and I will mail you $20.
                 
-    minus_fname = fname.split('+.wig')[0] + '-.wig'
+    minus_fname = fname.split('.+.wig')[0] + '.-.wig'
     
     if use_first_n_lines is False  or (use_first_n_lines is None):
         for s in for_split_lines(minus_fname, skip_first_line=True):

@@ -1,4 +1,4 @@
-import HTSeq, collections, pandas, os, re, dill, importlib, csv
+import HTSeq, collections, pandas, os, re, importlib, csv
 import numpy as np
 from pathlib import Path
 from typing import List, Mapping, Union
@@ -50,7 +50,7 @@ class readsPerGene():
         include_percent_xl=True):
 
         # Remove directories from column names.
-        self.df.columns = [x.split('/')[-1].split('_+.wig')[0] for x in self.df.columns]
+        self.df.columns = [x.split('/')[-1].split('.+.wig')[0] for x in self.df.columns]
 
         # Remove unwanted datasets (appear contaminated, too small, ...).
         self.set_blacklist(black_list=black_list)
@@ -87,12 +87,16 @@ class readsPerGene():
         print("Adding biotypes.")
 
         def fix(name, biotype):
-            re.search('\ASNHG\d*::intron', name) and (biotype := 'snoRNA')
-            (name=='_no_feature') and (biotype := 'intergenic')
-            (name=='_ambiguous') and (biotype := 'Target ambiguous')
+            if re.search('\ASNHG\d*::intron', name):
+                biotype = 'snoRNA'
+            if name=='_no_feature':
+                biotype = 'Intergenic'
+            if name=='_ambiguous':
+                biotype = 'Target ambiguous'
             return biotype
             
-        (df is None) and (df := self.df)
+        if df is None:
+            df = self.df
 
         df['Gene type'] = [
             fix(x, self.to_biotypes.get(x.split('::')[0], 'Unknown')) for x in df.index]
@@ -102,7 +106,8 @@ class readsPerGene():
 
     def proteins(self, df=None):
 
-        (df is None) and (df := self.df)
+        if df is None:
+            df = self.df
 
         _proteins = set([self.scheme.gene_from_fname(x) for x in df.columns])
 
@@ -112,7 +117,9 @@ class readsPerGene():
         return _proteins - set(['', None])
 
     def numeric_columns(self, df=None):
-        (df is None) and (df := self.df)
+
+        if df is None:
+            df = self.df
 
         return [x for x in df.columns if (df[x].dtype.kind in 'bifc')]
 
@@ -219,7 +226,7 @@ class readsPerMillion(readsPerGene):
 
     def get_total_reads(self, folder_name, load=False):
         
-        if load:
+        if load:            
             print(f"Loading total read counts from {load}.")
             with open(load) as fh:
                 next(fh)  # Skip header.

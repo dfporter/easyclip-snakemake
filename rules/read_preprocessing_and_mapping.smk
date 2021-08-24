@@ -1,4 +1,4 @@
-import os, sys, re, glob, pandas, importlib, shutil
+import os, sys, re, glob, pandas, importlib, shutil, subprocess
 import scripts
 import scripts.split_bam
 
@@ -8,14 +8,80 @@ import scripts.split_bam
 
 rule mapping:
     input:
-        fq1 = FASTQ_DIR + '/ready_to_map/R1.fastq.gz',
-        fq2 = FASTQ_DIR + '/ready_to_map/R2.fastq.gz',
+        fq1 = expand(FASTQ_DIR + '/ready_to_map/{pcr_index}R1.fastq.gz', pcr_index=PCR_INDEX_SET),
+        fq2 = expand(FASTQ_DIR + '/ready_to_map/{pcr_index}R2.fastq.gz', pcr_index=PCR_INDEX_SET),
+        star_repeats_genome = "assets/repeats_star_index/Genome",
     output:
-        all_reads = SAMS_DIR + '/all_reads.bam',
+        by_index = expand(SAMS_DIR + '/{pcr_index}all_reads.bam', pcr_index=PCR_INDEX_SET),
+        all_reads = SAMS_DIR + "/all_reads.bam",
     threads:
         8
     run:
-        ex.mapping(clobber=True)
+        for input_r1, input_r2 in zip(input.fq1, input.fq2):
+            
+            pcr_index = os.path.basename(input_r1).split('R1.fastq.gz')[0]           
+
+            cmd = config['STAR']
+            cmd += f" --genomeDir assets/repeats_star_index"
+            cmd += f' --runThreadN 8'
+            cmd += f' --readFilesIn {input_r1} {input_r2}'
+            cmd += ' --alignIntronMax 1'  # Max intron size = 1. Setting to 0 causes the default behavior.
+            cmd += ' --alignEndsType EndToEnd'  # Not completely sure this is right for repeats.
+            cmd += ' --outReadsUnmapped Fastx'
+            if os.path.splitext(input_r1)[-1] == '.gz':
+                cmd += ' --readFilesCommand zcat'
+            cmd += f" --outFileNamePrefix {SAMS_DIR}/{pcr_index}repeats."
+        
+            # Map to repeats with star.
+            print(cmd, '\n')
+            subprocess.check_output(cmd.split(' '))
+            print("Finished mapping.")
+            
+            subprocess.check_output(
+                f"mv {SAMS_DIR}/{pcr_index}repeats.Aligned.out.sam {SAMS_DIR}/{pcr_index}repeats.sam".split(' '))
+            
+            mapper = scripts.mapping.mappingMethods()
+            mapper.file_paths = {k:v for k,v in config.items()}
+            mapper.filter_sort_and_index_bam(f"{SAMS_DIR}/{pcr_index}repeats.sam")
+        
+            unmapped_fastq_fname1 = f'{SAMS_DIR}/{pcr_index}repeats.Unmapped.out.mate1'
+            unmapped_fastq_fname2 = f'{SAMS_DIR}/{pcr_index}repeats.Unmapped.out.mate2'
+            
+            # Get the string of the shell command to map to genome with star.
+            cmd = config['STAR']
+            cmd += f" --genomeDir {config['STAR_index']}"
+            cmd += f' --runThreadN 8 --limitOutSJcollapsed 2000000'
+            cmd += f' --readFilesIn {unmapped_fastq_fname1} {unmapped_fastq_fname2}'
+            cmd += ' --outReadsUnmapped Fastx'
+            if os.path.splitext(unmapped_fastq_fname1)[-1] == '.gz':
+                cmd += ' --readFilesCommand zcat'
+            # --outReadsUnmapped Fastx: output of unmapped and partially mapped (i.e. mapped only one mate
+            # of a paired end read) reads in separate file(s).
+            # output in separate fasta/fastq files, Unmapped.out.mate1/2
+            cmd += f" --outFileNamePrefix {SAMS_DIR}/{pcr_index}genome."
+
+            # Map to genome with star.
+            print(cmd, '\n')
+            subprocess.check_output(cmd.split(' '))
+            print("Finished mapping.")
+            
+            subprocess.check_output(
+                f"mv {SAMS_DIR}/{pcr_index}genome.Aligned.out.sam {SAMS_DIR}/{pcr_index}genome.sam".split(' '))
+            mapper.filter_sort_and_index_bam(f"{SAMS_DIR}/{pcr_index}genome.sam")
+            
+            # This writes {SAMS_DIR}/{pcr_index}all_reads.bam".
+            mapper.merge_repeats_and_genome(SAMS_DIR, pcr_index)
+            
+        # Merge the bam files representing the different PCR indexes.
+        cmd = f'samtools merge -f {SAMS_DIR}/all_reads.unsorted.bam ' + ' '.join([
+            f"{SAMS_DIR}/{pcr_index}all_reads.bam" for pcr_index in PCR_INDEX_SET])
+        print(cmd)
+        subprocess.check_output(cmd.split(' '))
+        
+        # Sort and index the bam file.
+        os.system(f"samtools sort {SAMS_DIR}/all_reads.unsorted.bam > {SAMS_DIR}/all_reads.bam")
+        os.system(f"samtools index {SAMS_DIR}/all_reads.bam")
+        os.system(f"rm {SAMS_DIR}/all_reads.unsorted.bam")
         
 rule dedup:
     input:
@@ -27,35 +93,52 @@ rule dedup:
     conda:
         '../envs/umitools.yml'
     shell:
-        "umi_tools dedup --stdin={input.bam} --stdout={output.bam}" + \
+        "umi_tools dedup --stdin={input.bam} --stdout={output.bam}"
         ' --log={output.log} --extract-umi-method=read_id;sleep 1;'
         "samtools index {output.bam}"
         
 rule split_bam:
     input:
-        bam = SAMS_DIR + '/all_reads.bam',
+        bam = SAMS_DIR + '/all_reads.bam',    
+        samples = config['samples'],  # Filename of sample info.
+    params:
+        # E.g., BBBBBBNNNNNNN. B=barcode base, N=UMI base.
+        l5_inline = config['L5_inline'],
+        # E.g., BBBBBNNNNN
+        l3_inline = config['L3_inline'],
     output:
         bams = expand(SAMS_DIR + '/split/{sample}.bam', sample=samples)
     run:
-        # Read name suffix format: 3773_AGCTAGAAAATCG_AGT_ACT_CGATTTTCTAGCT
-        # AGCTAGAAAATCG_AGT -> AGCTAG=L5 BC. AGT=L3 BC. AAAATCG=UMI.
-        scheme = ex.read_scheme()
-        print('=' * 140)
-        print(scheme.scheme_df)
-        barcodes = ['_'.join([str(x),str(y)]) for x,y in \
-                    zip(scheme.scheme_df['L5_BC'], scheme.scheme_df['L3_BC'])]
-        print('~' * 140)
-        print(barcodes)
-        print('zip:', list(zip(scheme.scheme_df['L5_BC'], scheme.scheme_df['L3_BC'])))
+        df = pandas.read_csv(config['samples'], sep='\t')
+        df['Gene'] = [re.sub(' ', '-', x) for x in df['Gene']]  # Get rid of spaces.
+        df = df.loc[[type(x)==type('') for x in df['Gene']], :]
+
+        # Define the samples list used throughout the workflow.
+        samples = [f"{exp}_{protein}_{rep}_{l5_bc}_{l3_bc}" for exp,protein,l5_bc,l3_bc,rep in zip(
+            df['Experiment'], df['Gene'], df['L5_BC'], df['L3_BC'], df['Replicate'])]
         
-        barcode_to_fname = {
-            '_'.join(l5_l3): os.path.splitext(scheme.p6p3_to_long_filename_r1[l5_l3])[0] \
-            for l5_l3 in zip(scheme.scheme_df['L5_BC'], scheme.scheme_df['L3_BC'])}
+        # Read name suffix format example: 3773_AGCTAGAAAATCG_AGT
+        # AGCTAGAAAATCG_AGT -> AGCTAG=L5 BC. AGT=L3 BC. AAAATCG=UMI.
+
+        print('=' * 140)
+        print(df.head())
+        
+        barcodes = []
+        barcode_to_fname = {}
+        for exp,protein,l5_bc,l3_bc,rep,r1_fastq in zip(
+            df['Experiment'], df['Gene'], df['L5_BC'], df['L3_BC'], df['Replicate'], df['R1_fastq']):
+
+            pcr_prefix = r1_fastq.split('R1.fastq.gz')[0]
+            barcode = f"{l5_bc}__{l3_bc}|{pcr_prefix}"
+            fname = f"{exp}_{protein}_{rep}_{l5_bc}_{l3_bc}"
+            barcode_to_fname[barcode] = fname
+            barcodes.append(barcode)
         
         print('-' * 140)
         print(barcode_to_fname)
         scripts.split_bam.split_bam(
-            input.bam, barcodes, barcode_to_fname, SAMS_DIR + "/split/")
+            input.bam, barcodes, barcode_to_fname, SAMS_DIR + "/split/",
+            l5_inline_pattern=str(params.l5_inline), l3_inline_pattern=str(params.l3_inline))
 
 
 #########################################################
@@ -64,71 +147,93 @@ rule split_bam:
 
 rule move_umis:
     input:
-        in1 = config['R1_fastq'],
-        in2 = config['R2_fastq'],
+        in1 = [config['Fastq_folder'].rstrip('/') + f"/{pcr_index}R1.fastq.gz" for pcr_index in PCR_INDEX_SET],
+        in2 = [config['Fastq_folder'].rstrip('/') + f"/{pcr_index}R2.fastq.gz" for pcr_index in PCR_INDEX_SET],
     output:
-        out1 = FASTQ_DIR + '/umis_moved/R1.fastq.gz',
-        out2 = FASTQ_DIR + '/umis_moved/R2.fastq.gz',
+        out1 = expand(FASTQ_DIR + '/umis_moved/{pcr_index}R1.fastq.gz', pcr_index=PCR_INDEX_SET),
+        out2 = expand(FASTQ_DIR + '/umis_moved/{pcr_index}R2.fastq.gz', pcr_index=PCR_INDEX_SET),
     threads:
         8
     run:
-        ex.read_scheme()
+        print(f"PCR_INDEX_SET={PCR_INDEX_SET}")
+        # Parameters:
+        # E.g., AGATCGGAAGAGCGGTTCAGCAGGAATGCCGAGACCGATCTCGTATGCCGTCTTCTGCTT
+        adapter1 = config['cutadapt_r1_adapter_seq_to_trim']   
+        # E.g., TACCCTTCGCTTCACACACAAGGGGAAAGAGTGTAGATCTCGGTGGTCGC
+        adapter2 = config['cutadapt_r2_adapter_seq_to_trim']
+        # E.g., BBBBBBNNNNNNN. B=barcode base, N=UMI base.
+        l5_inline = config['L5_inline']
+        # E.g., BBBBBNNNNN
+        l3_inline = config['L3_inline']        
         
         fq = FASTQ_DIR
         os.makedirs(f'{fq}/umis_moved/too_short/', exist_ok=True)
         min_length = 14
         
-        basename1 = os.path.splitext(os.path.basename(input.in1))[0]
-        basename2 = os.path.splitext(os.path.basename(input.in2))[0]
-        cmd = 'cutadapt -A TACCCTTCGCTTCACACACAAGGGGAAAGAGTGTAGATCTCGGTGGTCGC' +\
-        ' -a AGATCGGAAGAGCGGTTCAGCAGGAATGCCGAGACCGATCTCGTATGCCGTCTTCTGCTT' +\
-        ' --pair-filter=any -u 13 -U 3 -j 0'
-        cmd += r" --rename='{id}_{r1.cut_prefix}-{r2.cut_prefix}" + \
-        f' --too-short-output {fq}/umis_moved/too_short/{basename1}.gz'
-        cmd += f' --too-short-paired-output {fq}/umis_moved/too_short/{basename2}.gz'
-        cmd += f' --minimum-length {min_length} -o {output.out1} -p {output.out2}'
-        cmd += f' {input.in1} {input.in2}'
+        bases_l5_to_move = len(l5_inline)
+        bases_l3_to_move = len(l3_inline)
+        
+        for input_r1, input_r2, pcr_index in zip(input.in1, input.in2, PCR_INDEX_SET):
+            print(input_r1, "<-r1")
+            basename1 = os.path.splitext(os.path.basename(input_r1))[0]
+            basename2 = os.path.splitext(os.path.basename(input_r2))[0]
 
-        print(cmd)
-        res = subprocess.check_output(cmd.split(' '))
-        res = res.decode()
-        #"umi_tools extract --stdin={input.in1} --read2-in={input.in2} --extract-method=regex" + \
-        #r''' --bc-pattern="(?P<cell_1>.{{6}})(?P<umi_1>.{{7}})" --bc-pattern2="(?P<cell_2>.{{3}})"''' + \
-        #" --stdout={output.out1} --read2-out={output.out2}"
-        "umi_tools extract --stdin={input.in1} --read2-in={input.in2} --extract-method=string" + \
-        r''' --bc-pattern=CCCCCCNNNNNNN --bc-pattern2=NNN''' + \
-        " --stdout={output.out1} --read2-out={output.out2}"
-        #N = UMI position (required)
-        #C = cell barcode position (optional)
-        #X = sample position (optional)
+            # Construct the cutadapt command.
+            # Say, -u 13 -U 3 for original adapters. -j 8 -> use 8 threads.
+            cmd = f'cutadapt -A {adapter2} -a {adapter1}' + \
+            f' --pair-filter=any -u {bases_l5_to_move} -U {bases_l3_to_move} -j 8'
+
+            print(cmd)
+            print('%' * 100)
+            cmd += r" --rename={id}__{r1.cut_prefix}-{r2.cut_prefix}|" + pcr_index + \
+            f' --too-short-output {fq}/umis_moved/too_short/{basename1}.gz'
+
+            cmd += f' --too-short-paired-output {fq}/umis_moved/too_short/{basename2}.gz'
+            cmd += f' --minimum-length {min_length} -o {output.out1} -p {output.out2}'
+            cmd += f' {input.in1} {input.in2}'
+
+            print(cmd)
+            res = subprocess.check_output(cmd.split(' '))
+            res = res.decode()
         
 
 rule cut:
     input:
-        in1 = FASTQ_DIR + '/umis_moved/R1.fastq.gz',
-        in2 = FASTQ_DIR + '/umis_moved/R2.fastq.gz',
+        #in1 = FASTQ_DIR + '/umis_moved/R1.fastq.gz',
+        #in2 = FASTQ_DIR + '/umis_moved/R2.fastq.gz',
+        in1 = expand(FASTQ_DIR + '/umis_moved/{pcr_index}R1.fastq.gz', pcr_index=PCR_INDEX_SET),
+        in2 = expand(FASTQ_DIR + '/umis_moved/{pcr_index}R2.fastq.gz', pcr_index=PCR_INDEX_SET),
+    params:
+        # E.g., BBBBBBNNNNNNN. B=barcode base, N=UMI base.
+        l5_inline = config['L5_inline'],
+        # E.g., BBBBBNNNNN
+        l3_inline = config['L3_inline'],
     output:
-        out1 = FASTQ_DIR + '/ready_to_map/R1.fastq.gz',
-        out2 = FASTQ_DIR + '/ready_to_map/R2.fastq.gz',
+        out1 = expand(FASTQ_DIR + '/ready_to_map/{pcr_index}R1.fastq.gz', pcr_index=PCR_INDEX_SET),
+        out2 = expand(FASTQ_DIR + '/ready_to_map/{pcr_index}R2.fastq.gz', pcr_index=PCR_INDEX_SET),
     threads:
         8
     run:
-        ex.read_scheme()
+
+        bases_l5_to_move = len(str(params.l5_inline))
+        bases_l3_to_move = len(str(params.l3_inline))        
         
         #fq = ex.file_paths['fastq']
         os.makedirs(f'{FASTQ_DIR}/ready_to_map/too_short/', exist_ok=True)
         min_length = 14
         
-        basename1 = os.path.splitext(os.path.basename(input.in1))[0]
-        basename2 = os.path.splitext(os.path.basename(input.in2))[0]
-        cmd = 'cutadapt --pair-filter=any -U -13 -u -3 -j 0' +\
-        f' --too-short-output {FASTQ_DIR}/ready_to_map/too_short/{basename1}.gz'
-        cmd += f' --too-short-paired-output {FASTQ_DIR}/ready_to_map/too_short/{basename2}.gz'
-        cmd += f' --minimum-length {min_length} -o {output.out1} -p {output.out2}'
-        cmd += f' {input.in1} {input.in2}'
+        for input_r1, input_r2 in zip(input.in1, input.in2):
+            basename1 = os.path.splitext(os.path.basename(input_r1))[0]
+            basename2 = os.path.splitext(os.path.basename(input_r2))[0]
+            
+            cmd = f'cutadapt --pair-filter=any -U -{bases_l5_to_move} -u -{bases_l3_to_move} -j 8' +\
+            f' --too-short-output {FASTQ_DIR}/ready_to_map/too_short/{basename1}.gz'
+            cmd += f' --too-short-paired-output {FASTQ_DIR}/ready_to_map/too_short/{basename2}.gz'
+            cmd += f' --minimum-length {min_length} -o {output.out1} -p {output.out2}'
+            cmd += f' {input.in1} {input.in2}'
 
-        print(cmd)
-        res = subprocess.check_output(cmd.split(' '))
-        res = res.decode()
+            print(cmd)
+            res = subprocess.check_output(cmd.split(' '))
+            res = res.decode()
         
         

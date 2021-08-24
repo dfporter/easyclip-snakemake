@@ -24,14 +24,18 @@ def total_read_numbers(folder: str, outfile='./data/') -> Mapping[str, float]:
     os.makedirs(os.path.dirname(outfile), exist_ok=True)
     
     aucs = {}
-    for fname in glob.glob(f"{folder}/*_+.wig"):
+    for fname in glob.glob(f"{folder}/*.+.wig"):
         print(f"{fname}...", end=" ")
         aucs[fname] = get_auc(fname)
-        minus_fname = fname.split('+.wig')[0] + '-.wig'
+        minus_fname = fname.split('.+.wig')[0] + '.-.wig'
         aucs[fname] += get_auc(minus_fname)
         print(f"AUC={aucs[fname]:,}")
     
-    aucs.update({os.path.basename(k).rstrip('_+.wig'): v for k,v in aucs.items()})
+    original_aucs = {k:v for k,v in aucs.items()}
+    
+    # For good measure, write the same values with some different versions of the filename.
+    aucs.update({os.path.basename(k).rstrip('.+.wig'): v for k,v in original_aucs.items()})
+    aucs.update({os.path.basename(k): v for k,v in original_aucs.items()})
     
     with open(outfile, 'w') as f:
         f.write("Dataset\tTotal read number\n")
