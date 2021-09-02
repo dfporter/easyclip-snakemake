@@ -25,7 +25,6 @@ To prevent errors running snakemake with --use-conda, install mamba:
 $ conda install mamba -n base -c conda-forge
 ```
 
-'''
 
 To install CLIPPER:
 ```bash
