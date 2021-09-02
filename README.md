@@ -9,15 +9,40 @@ The code used for the paper https://pubmed.ncbi.nlm.nih.gov/33692367/, warts and
 
 Clone this repositiory into a directory
 
-```
+```bash
 $ git clone git@github.com:dfporter/easyclip-v2.git
 ```
 
 Create and activate the conda environment:
 
-```
-$ conda env create -f=envs/conda.yaml -n easyclip-env
+```bash
+$ conda env create -f=envs/conda.yml -n easyclip-env
 $ conda activate easyclip-env
+```
+
+To prevent errors running snakemake with --use-conda, install mamba:
+```bash
+$ conda install mamba -n base -c conda-forge
+```
+
+'''
+
+To install CLIPPER:
+```bash
+
+# In the easyCLIP directory:
+git clone https://github.com/YeoLab/clipper
+cd clipper
+conda env create -f environment3.yml
+conda activate clipper3
+python setup.py install
+
+# Replace the samtools import version in the environment3.yml file with 1.6
+# (or some other version that works) to prevernt an error message whem samtools called.
+# Alternatively, run this line:
+conda install -c bioconda samtools=1.6 --force-reinstall
+
+# Return to the easyclip-env conda environment before running the workflow.
 ```
 
 #### Config files and UMIs/in-line barcodes
@@ -77,6 +102,9 @@ Exp91	A1CF-E34K	1	AGT	CTGATC	All_R1.fastq.gz	All_R2.fastq.gz
 ```
 
 All of these columns are required.
+The L3_BC and L5_BC are the inline barcodes found in read 2 and read 1, respectively.
+They should be written in the samples.txt file as they will appear in the raw read sequences.
+
 In the case where PCR indexing has been used, samples must be demultiplexed from the index reads (not the inline barcodes) before running this workflow. The fastq files for each separate index set must be given in the R1_fastq/R2_fastq columns in the samples file.
 
 The R1_fastq/R2_fastq columns in the samples.txt file must be just the file basename and the fastqs must be found in the folder set in the config file:

@@ -173,7 +173,8 @@ rule move_umis:
         bases_l5_to_move = len(l5_inline)
         bases_l3_to_move = len(l3_inline)
         
-        for input_r1, input_r2, pcr_index in zip(input.in1, input.in2, PCR_INDEX_SET):
+        for input_r1, input_r2, pcr_index, output_r1, output_r2 in zip(
+            input.in1, input.in2, PCR_INDEX_SET, output.out1, output.out2):
             print(input_r1, "<-r1")
             basename1 = os.path.splitext(os.path.basename(input_r1))[0]
             basename2 = os.path.splitext(os.path.basename(input_r2))[0]
@@ -183,14 +184,14 @@ rule move_umis:
             cmd = f'cutadapt -A {adapter2} -a {adapter1}' + \
             f' --pair-filter=any -u {bases_l5_to_move} -U {bases_l3_to_move} -j 8'
 
-            print(cmd)
+
             print('%' * 100)
             cmd += r" --rename={id}__{r1.cut_prefix}-{r2.cut_prefix}|" + pcr_index + \
             f' --too-short-output {fq}/umis_moved/too_short/{basename1}.gz'
 
             cmd += f' --too-short-paired-output {fq}/umis_moved/too_short/{basename2}.gz'
-            cmd += f' --minimum-length {min_length} -o {output.out1} -p {output.out2}'
-            cmd += f' {input.in1} {input.in2}'
+            cmd += f' --minimum-length {min_length} -o {output_r1} -p {output_r2}'
+            cmd += f' {input_r1} {input_r2}'
 
             print(cmd)
             res = subprocess.check_output(cmd.split(' '))
@@ -222,15 +223,15 @@ rule cut:
         os.makedirs(f'{FASTQ_DIR}/ready_to_map/too_short/', exist_ok=True)
         min_length = 14
         
-        for input_r1, input_r2 in zip(input.in1, input.in2):
+        for input_r1, input_r2, output_r1, output_r2 in zip(input.in1, input.in2, output.out1, output.out2):
             basename1 = os.path.splitext(os.path.basename(input_r1))[0]
             basename2 = os.path.splitext(os.path.basename(input_r2))[0]
             
             cmd = f'cutadapt --pair-filter=any -U -{bases_l5_to_move} -u -{bases_l3_to_move} -j 8' +\
             f' --too-short-output {FASTQ_DIR}/ready_to_map/too_short/{basename1}.gz'
             cmd += f' --too-short-paired-output {FASTQ_DIR}/ready_to_map/too_short/{basename2}.gz'
-            cmd += f' --minimum-length {min_length} -o {output.out1} -p {output.out2}'
-            cmd += f' {input.in1} {input.in2}'
+            cmd += f' --minimum-length {min_length} -o {output_r1} -p {output_r2}'
+            cmd += f' {input_r1} {input_r2}'
 
             print(cmd)
             res = subprocess.check_output(cmd.split(' '))

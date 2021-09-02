@@ -60,6 +60,14 @@ rule get_chrom_sizes:
 # References for read mapping.
 #########################################################   
 
+rule subset_gtf_to_only_tsl1_and_NA:      
+    input:
+        config['feature_gtf']
+    output:
+        "assets/reference/only_tsl_1_and_NA.gtf"
+    shell:
+        "python scripts/subset_gtf_to_only_tsl1_and_NA.py {input} {output}"
+        
 rule repeats_chromosome:
     input:
         embl = 'assets/reference/Dfam_curatedonly.embl',

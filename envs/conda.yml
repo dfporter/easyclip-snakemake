@@ -6,6 +6,10 @@ dependencies:
   - python>=3.6
   - deeptools=3.3.0
   - numpy
+  - dill
+  - bedtools
+#  - bedsort
+#  - bedgraphtobigwig
   - gffutils
   - cutadapt
   - scipy
