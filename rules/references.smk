@@ -68,6 +68,14 @@ rule subset_gtf_to_only_tsl1_and_NA:
     shell:
         "python scripts/subset_gtf_to_only_tsl1_and_NA.py {input} {output}"
         
+rule create_featureCounts_formatted_gtf_from_regular_gtf:
+    input:
+        "assets/reference/only_tsl_1_and_NA.gtf"
+    output:
+        "assets/reference/featureCounts_formatted.gtf"
+    shell:
+        "python scripts/gtf_to_featureCounts_formatted_gtf.py {input} {output}"
+        
 rule repeats_chromosome:
     input:
         embl = 'assets/reference/Dfam_curatedonly.embl',

@@ -10,12 +10,13 @@ The code used for the paper https://pubmed.ncbi.nlm.nih.gov/33692367/, warts and
 Clone this repositiory into a directory
 
 ```bash
-git clone git@github.com:dfporter/easyclip-v2.git
+git clone git@github.com:dfporter/easyclip-snakemake.git
 ```
 
 Create and activate the conda environment:
 
 ```bash
+cd easyclip-snakemake
 conda env create -f=envs/conda.yml -n easyclip-env
 conda activate easyclip-env
 ```
@@ -42,6 +43,9 @@ python setup.py install
 conda install -c bioconda samtools=1.6 --force-reinstall
 
 # Return to the easyclip-env conda environment before running the workflow.
+cd ..
+conda deactivate
+conda activate easyclip-snakemake
 ```
 
 #### Config files and UMIs/in-line barcodes
