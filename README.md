@@ -10,19 +10,19 @@ The code used for the paper https://pubmed.ncbi.nlm.nih.gov/33692367/, warts and
 Clone this repositiory into a directory
 
 ```bash
-$ git clone git@github.com:dfporter/easyclip-v2.git
+git clone git@github.com:dfporter/easyclip-v2.git
 ```
 
 Create and activate the conda environment:
 
 ```bash
-$ conda env create -f=envs/conda.yml -n easyclip-env
-$ conda activate easyclip-env
+conda env create -f=envs/conda.yml -n easyclip-env
+conda activate easyclip-env
 ```
 
 To prevent errors running snakemake with --use-conda, install mamba:
 ```bash
-$ conda install mamba -n base -c conda-forge
+conda install mamba -n base -c conda-forge
 ```
 
 
@@ -120,15 +120,15 @@ That is, the must match the pattern {prefix}R1.fastq.gz and {prefix}R2.fastq.gz,
 Running the snakemake workflow with no arguments will run it on the testdata (placed in testdata/, with the config file config.yaml and the samples file testdata/samples.txt):
 
 ```
-$ snakemake -j <cpus> --use-conda 
+snakemake -j <cpus> --use-conda 
 ```
 
 The workflow is split into three parts, in order:
 
 ```bash
-$ snakemake -j <cpus> --use-conda -s snake.processing.py  # Raw fastq.gz to bam/bw/ect.
-$ snakemake -j <cpus> --use-conda -s snake.clipper.py  # Run clipper to call peaks.
-$ snakemake -j <cpus> --use-conda -s snake.analysis.py  # Analysis.
+snakemake -j <cpus> --use-conda -s snake.processing.py  # Raw fastq.gz to bam/bw/ect.
+snakemake -j <cpus> --use-conda -s snake.clipper.py  # Run clipper to call peaks.
+snakemake -j <cpus> --use-conda -s snake.analysis.py  # Analysis.
 ```
 The required inputs are a star genome index to map to the config.yaml file, the genomic fasta for that build, the samples.txt file, and raw fastq.gz files for read1 and read2.
 

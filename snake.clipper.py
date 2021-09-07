@@ -23,7 +23,7 @@ import scripts.split_bam
 import scripts.random_sequence
 
 # Load config file.
-configfile: "config.rb.yaml"
+configfile: "config.yaml"
 
 
 #########################################################
