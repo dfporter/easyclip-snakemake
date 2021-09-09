@@ -45,7 +45,7 @@ conda install -c bioconda samtools=1.6 --force-reinstall
 # Return to the easyclip-env conda environment before running the workflow.
 cd ..
 conda deactivate
-conda activate easyclip-snakemake
+conda activate easyclip-env
 ```
 
 #### Config files and UMIs/in-line barcodes
