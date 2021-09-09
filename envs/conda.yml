@@ -8,8 +8,8 @@ dependencies:
   - numpy
   - dill
   - bedtools
-#  - ucsc-bedsort
-#  - ucsc-bedgraphtobigwig
+  - ucsc-bedsort
+  - ucsc-bedgraphtobigwig
   - gffutils
   - cutadapt
   - scipy
