@@ -420,24 +420,6 @@ rule featureCounts_on_bams:
         counts = config['counts'].rstrip('/') + "/featureCounts_on_bams.txt",
     run:
         shell("featureCounts -t exon -g gene_name -F SAF -a {input.gtf} -o {output.counts} {input.bams}") 
-        
-rule create_featureCounts_formatted_gtf_from_regular_gtf:
-    input:
-        "assets/reference/only_tsl_1_and_NA.gtf"
-    output:
-        "assets/reference/featureCounts_formatted.gtf"
-    shell:
-        "python scripts/gtf_to_featureCounts_formatted_gtf.py {input} {output}"
-
-rule subset_gtf_to_only_tsl1_and_NA:      
-    input:
-        config['feature_gtf']
-    output:
-        "assets/reference/only_tsl_1_and_NA.gtf"
-    shell:
-        "python scripts/subset_gtf_to_only_tsl1_and_NA.py {input} {output}"
-
-
 
 rule download_control_data:
     output:
