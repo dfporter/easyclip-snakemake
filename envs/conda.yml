@@ -26,3 +26,4 @@ dependencies:
   - snakemake
   - star=2.7.1a
   - samtools
+  - openpyxl
