@@ -150,7 +150,7 @@ rule remove_non_chromosomal_reads:
     run:
         shell("samtools view -b {input.bam} chr{{1..22}} > {output.bam}")
         
-"""        
+       
 rule bamToBigwig:
     input:
         bams = SAMS_DIR + "/dedup/{sample}.bam"
@@ -159,4 +159,3 @@ rule bamToBigwig:
     shell:
         #"bamCoverage --binSize 10 -b {input} -o {output} -of bigwig"
         "bamCoverage --binSize 1 -b {input} -o {output} -of bigwig"
-        """
