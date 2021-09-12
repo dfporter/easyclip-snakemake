@@ -82,7 +82,7 @@ rule all:
         SAMS_DIR + '/all_reads.bam',
         expand(SAMS_DIR + "/split/{sample}.bam", sample=samples),
         expand(SAMS_DIR + "/dedup/{sample}.bam", sample=samples),
-        #expand(BIGWIG + "/{sample}.bigwig", sample=samples),
+        expand(BIGWIG + "/{sample}.bigwig", sample=samples),
         expand(SAMS_DIR + "/3end/{sample}.bam", sample=samples),
         expand(BIGWIG + "/3prime/{sample}.+.bigwig", sample=samples),
         expand(BIGWIG + "/3prime/{sample}.-.bigwig", sample=samples),
