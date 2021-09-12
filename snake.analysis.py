@@ -106,7 +106,7 @@ rule all:
         SAMS_DIR + '/all_reads.bam',
         expand(SAMS_DIR + "/split/{sample}.bam", sample=samples),
         expand(SAMS_DIR + "/dedup/{sample}.bam", sample=samples),
-        #expand(BIGWIG + "/{sample}.bigwig", sample=samples),
+        expand(BIGWIG + "/{sample}.bigwig", sample=samples),
         #expand(SAMS_DIR + "/3end/{sample}.bam", sample=samples),
         #config['counts'].rstrip('/') + "/bigwig_3prime_counts_transcripts.txt",
         #config['counts'].rstrip('/') + "/bam_3prime_counts_transcripts.txt",
@@ -508,7 +508,7 @@ rule convert_bam_to_3prime_end_only:
         shell("samtools sort -o {output_bam}.sort {output_bam}")
         shell("mv {output_bam}.sort {output_bam}")
         shell("samtools index {output_bam}")
-"""        
+      
 rule bamToBigwig:
     input:
         bams = SAMS_DIR + "/dedup/{sample}.bam"
@@ -517,4 +517,3 @@ rule bamToBigwig:
     shell:
         #"bamCoverage --binSize 10 -b {input} -o {output} -of bigwig"
         "bamCoverage --binSize 1 -b {input} -o {output} -of bigwig"
-        """
