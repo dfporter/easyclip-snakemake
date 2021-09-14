@@ -121,11 +121,7 @@ That is, the must match the pattern {prefix}R1.fastq.gz and {prefix}R2.fastq.gz,
 
 #### Run workflow
 
-Running the snakemake workflow with no arguments will run it on the testdata (placed in testdata/, with the config file config.yaml and the samples file testdata/samples.txt):
-
-```
-snakemake -j <cpus> --use-conda 
-```
+Running the snakemake workflow with no arguments will run it on the testdata (placed in testdata/, with the config file config.yaml and the samples file testdata/samples.txt)
 
 The workflow is split into three parts, in order:
 
