@@ -143,6 +143,7 @@ havana_transcript "OTTHUMT00000362751.1";
             gtf.write("\t".join([
                 'repeats', 'repeats', 'exon', str(start), str(end), '.', '+', '.',
                 f'gene_id "{_id}"; transcript_id "{_id}"; gene_type "repeat"; gene_name "{nm}"; exon_number 1;']) + '\n')
+            chrom_len = end
         gtf.close()
         fasta.close()
     

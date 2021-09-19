@@ -437,24 +437,28 @@ rule download_control_data:
         shell("mv random_controls/counts/counts/* random_controls/counts/")
         shell("rmdir random_controls/counts/counts/")
         
+        shell("sleep 10")
         shell(f"wget http://khavarilab.stanford.edu/s/random_non_RBP_control_bigwig_cDNA_end_1tar.gz")
         shell("mv random_non_RBP_control_bigwig_cDNA_end_1tar.gz random_non_RBP_control_bigwig_cDNA_end_1.tar.gz")
         shell("tar -xf random_non_RBP_control_bigwig_cDNA_end_1.tar.gz -C random_controls/bigwig/3prime/")
         shell("mv random_controls/bigwig/3prime/bigwig_3prime_1/* random_controls/bigwig/3prime/")
         shell("rmdir random_controls/bigwig/3prime/bigwig_3prime_1/")
         
+        shell("sleep 10")
         shell(f"wget http://khavarilab.stanford.edu/s/random_non_RBP_control_bigwig_cDNA_end_2tar.gz")
         shell("mv random_non_RBP_control_bigwig_cDNA_end_2tar.gz random_non_RBP_control_bigwig_cDNA_end_2.tar.gz")
         shell("tar -xf random_non_RBP_control_bigwig_cDNA_end_2.tar.gz -C random_controls/bigwig/3prime/")
         shell("mv random_controls/bigwig/3prime/bigwig_3prime_2/* random_controls/bigwig/3prime/")
         shell("rmdir random_controls/bigwig/3prime/bigwig_3prime_2/")
         
+        shell("sleep 10")
         shell(f"wget http://khavarilab.stanford.edu/s/random_non_RBP_control_bigwigs_1tar.gz")
         shell("mv random_non_RBP_control_bigwigs_1tar.gz random_non_RBP_control_bigwigs_1.tar.gz")
         shell("tar -xf random_non_RBP_control_bigwigs_1.tar.gz -C random_controls/bigwig/")
         shell("mv random_controls/bigwig/bigwig_group1/* random_controls/bigwig/")
         shell("rmdir random_controls/bigwig/bigwig_group1/")
         
+        shell("sleep 10")
         shell(f"wget http://khavarilab.stanford.edu/s/random_non_RBP_control_bigwigs_2tar.gz")
         shell("mv random_non_RBP_control_bigwigs_2tar.gz random_non_RBP_control_bigwigs_2.tar.gz")
         shell("tar -xf random_non_RBP_control_bigwigs_2.tar.gz -C random_controls/bigwig/")

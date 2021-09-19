@@ -3,7 +3,7 @@ import scripts
 import scripts.split_bam
 
 #########################################################
-# Read mapping, splitting and duplicate removal.
+# Read mapping, splitting and duplicate removal. 
 #########################################################    
 
 rule mapping:
@@ -15,7 +15,7 @@ rule mapping:
         by_index = expand(SAMS_DIR + '/{pcr_index}all_reads.bam', pcr_index=PCR_INDEX_SET),
         all_reads = SAMS_DIR + "/all_reads.bam",
     threads:
-        8
+        20
     run:
         for input_r1, input_r2 in zip(input.fq1, input.fq2):
             
@@ -23,7 +23,7 @@ rule mapping:
 
             cmd = config['STAR']
             cmd += f" --genomeDir assets/repeats_star_index"
-            cmd += f' --runThreadN 8'
+            cmd += ' --runThreadN ' + str(threads)
             cmd += f' --readFilesIn {input_r1} {input_r2}'
             cmd += ' --alignIntronMax 1'  # Max intron size = 1. Setting to 0 causes the default behavior.
             cmd += ' --alignEndsType EndToEnd'  # Not completely sure this is right for repeats.
@@ -50,7 +50,8 @@ rule mapping:
             # Get the string of the shell command to map to genome with star.
             cmd = config['STAR']
             cmd += f" --genomeDir {config['STAR_index']}"
-            cmd += f' --runThreadN 8 --limitOutSJcollapsed 2000000'
+            cmd += ' --runThreadN ' + str(threads)
+            cmd += ' --limitOutSJcollapsed 2000000'
             cmd += f' --readFilesIn {unmapped_fastq_fname1} {unmapped_fastq_fname2}'
             cmd += ' --outReadsUnmapped Fastx'
             if os.path.splitext(unmapped_fastq_fname1)[-1] == '.gz':
@@ -153,9 +154,10 @@ rule move_umis:
         out1 = expand(FASTQ_DIR + '/umis_moved/{pcr_index}R1.fastq.gz', pcr_index=PCR_INDEX_SET),
         out2 = expand(FASTQ_DIR + '/umis_moved/{pcr_index}R2.fastq.gz', pcr_index=PCR_INDEX_SET),
     threads:
-        8
+        20
     run:
         print(f"PCR_INDEX_SET={PCR_INDEX_SET}")
+        print('threads:', threads)
         # Parameters:
         # E.g., AGATCGGAAGAGCGGTTCAGCAGGAATGCCGAGACCGATCTCGTATGCCGTCTTCTGCTT
         adapter1 = config['cutadapt_r1_adapter_seq_to_trim']   
@@ -182,7 +184,8 @@ rule move_umis:
             # Construct the cutadapt command.
             # Say, -u 13 -U 3 for original adapters. -j 8 -> use 8 threads.
             cmd = f'cutadapt -A {adapter2} -a {adapter1}' + \
-            f' --pair-filter=any -u {bases_l5_to_move} -U {bases_l3_to_move} -j 8'
+            f' --pair-filter=any -u {bases_l5_to_move} -U {bases_l3_to_move}'
+            cmd += " -j " + str(threads)
 
 
             print('%' * 100)
@@ -213,7 +216,7 @@ rule cut:
         out1 = expand(FASTQ_DIR + '/ready_to_map/{pcr_index}R1.fastq.gz', pcr_index=PCR_INDEX_SET),
         out2 = expand(FASTQ_DIR + '/ready_to_map/{pcr_index}R2.fastq.gz', pcr_index=PCR_INDEX_SET),
     threads:
-        8
+        20
     run:
 
         bases_l5_to_move = len(str(params.l5_inline))
@@ -227,8 +230,9 @@ rule cut:
             basename1 = os.path.splitext(os.path.basename(input_r1))[0]
             basename2 = os.path.splitext(os.path.basename(input_r2))[0]
             
-            cmd = f'cutadapt --pair-filter=any -U -{bases_l5_to_move} -u -{bases_l3_to_move} -j 8' +\
-            f' --too-short-output {FASTQ_DIR}/ready_to_map/too_short/{basename1}.gz'
+            cmd = f'cutadapt --pair-filter=any -U -{bases_l5_to_move} -u -{bases_l3_to_move}' + \
+                " -j " + str(threads) + \
+                f' --too-short-output {FASTQ_DIR}/ready_to_map/too_short/{basename1}.gz'
             cmd += f' --too-short-paired-output {FASTQ_DIR}/ready_to_map/too_short/{basename2}.gz'
             cmd += f' --minimum-length {min_length} -o {output_r1} -p {output_r2}'
             cmd += f' {input_r1} {input_r2}'
