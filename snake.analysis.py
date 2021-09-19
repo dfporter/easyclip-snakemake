@@ -107,6 +107,7 @@ rule all:
         expand(SAMS_DIR + "/split/{sample}.bam", sample=samples),
         expand(SAMS_DIR + "/dedup/{sample}.bam", sample=samples),
         expand(BIGWIG + "/{sample}.bigwig", sample=samples),
+        expand(BIGWIG + "/rpm/{sample}.bigwig", sample=samples),
         #expand(SAMS_DIR + "/3end/{sample}.bam", sample=samples),
         #config['counts'].rstrip('/') + "/bigwig_3prime_counts_transcripts.txt",
         #config['counts'].rstrip('/') + "/bam_3prime_counts_transcripts.txt",
@@ -512,7 +513,34 @@ rule convert_bam_to_3prime_end_only:
         shell("samtools sort -o {output_bam}.sort {output_bam}")
         shell("mv {output_bam}.sort {output_bam}")
         shell("samtools index {output_bam}")
-      
+
+def scale_factor(wildcards):
+    df = pandas.read_csv(config['data']+"/total_read_numbers.txt", sep='\t')
+    df["basename"] = [x.split('/')[-1].split('.')[0] for x in df.Dataset]
+    return str(1000000/df.loc[df['basename']==wildcards.sample, 'Total read number'].iloc[0])
+            
+rule bigWigToScaledWig:
+    input:
+        bigwig = BIGWIG + "/{sample}.bigwig",
+        total_reads = config['data']+"/total_read_numbers.txt",
+    output:
+        wig = TOP_DIR + "/scaledWig/{sample}.bigwig"
+    params:
+        scaling_factor = scale_factor
+    conda:
+        "envs/wiggletools.yml"
+    shell:
+        "wiggletools write {output.wig} scale {params.scaling_factor} {input.bigwig}"
+
+rule scaledWigToBigWig:
+    input:
+        wig = TOP_DIR + "/scaledWig/{sample}.bigwig",
+        chrom_sizes = "data/processed/chrom.sizes"
+    output:
+        bigwig = BIGWIG + "/rpm/{sample}.bigwig"
+    shell:
+        "wigToBigWig {input.wig} {input.chrom_sizes} {output.bigwig}"
+        
 rule bamToBigwig:
     input:
         bams = SAMS_DIR + "/dedup/{sample}.bam"

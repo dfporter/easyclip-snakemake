@@ -1,0 +1,8 @@
+name: wiggletools-snakemake-env
+channels:
+  - bioconda
+  - conda-forge
+dependencies:
+  - python=3.6
+  - wiggletools
+  - ucsc-wigtobigwig
