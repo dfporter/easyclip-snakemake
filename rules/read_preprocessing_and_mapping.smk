@@ -122,6 +122,7 @@ rule mapping:
     output:
         by_index = expand(SAMS_DIR + '/{pcr_index}all_reads.bam', pcr_index=PCR_INDEX_SET),
         all_reads = SAMS_DIR + "/all_reads.bam",
+        all_reads_bai = SAMS_DIR + "/all_reads.bam.bai",
     threads:
         20
     run:
