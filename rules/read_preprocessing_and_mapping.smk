@@ -14,6 +14,8 @@ rule map_to_rDNA:
         by_index = expand(SAMS_DIR + '/{pcr_index}rDNA.bam', pcr_index=PCR_INDEX_SET),
         filt = expand(SAMS_DIR + '/{pcr_index}rDNA.filtered.bam', pcr_index=PCR_INDEX_SET),
         filt_bai = expand(SAMS_DIR + '/{pcr_index}rDNA.filtered.bam.bai', pcr_index=PCR_INDEX_SET),
+        fq1 = expand(SAMS_DIR + '/{pcr_index}rDNA.Unmapped.out.mate1', pcr_index=PCR_INDEX_SET),
+        fq2 = expand(SAMS_DIR + '/{pcr_index}rDNA.Unmapped.out.mate2', pcr_index=PCR_INDEX_SET),
     threads:
         20
     run:
