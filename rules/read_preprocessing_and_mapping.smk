@@ -264,8 +264,8 @@ rule second_adapter_trim:
         out2 = expand(FASTQ_DIR + '/second_cut/{pcr_index}R2.fastq.gz', pcr_index=PCR_INDEX_SET),
     threads:
         20
-    conda:
-        "envs/cutadapt.yml"
+    #conda:
+    #    "envs/cutadapt.yml"
     run:
         # Parameters:
         # E.g., AGATCGGAAGAGCGGTTCAGCAGGAATGCCGAGACCGATCTCGTATGCCGTCTTCTGCTT
@@ -305,7 +305,44 @@ rule second_adapter_trim:
             print(cmd)
             res = subprocess.check_output(cmd.split(' '))
             res = res.decode()
-            
+
+def move_umi(wildcards):
+    print(f"PCR_INDEX_SET={PCR_INDEX_SET}")
+    print('threads:', threads)
+    # Parameters:
+    # E.g., AGATCGGAAGAGCGGTTCAGCAGGAATGCCGAGACCGATCTCGTATGCCGTCTTCTGCTT
+    adapter1 = config['cutadapt_r1_adapter_seq_to_trim']   
+    # E.g., TACCCTTCGCTTCACACACAAGGGGAAAGAGTGTAGATCTCGGTGGTCGC
+    adapter2 = config['cutadapt_r2_adapter_seq_to_trim']
+    # E.g., BBBBBBNNNNNNN. B=barcode base, N=UMI base.
+    l5_inline = config['L5_inline']
+    # E.g., BBBBBNNNNN
+    l3_inline = config['L3_inline']        
+    
+    fq = FASTQ_DIR
+    os.makedirs(f'{fq}/umis_moved/too_short/', exist_ok=True)
+    min_length = 14
+    basename1 = os.path.splitext(os.path.basename(input_r1))[0]
+    basename2 = os.path.splitext(os.path.basename(input_r2))[0]
+
+    # Construct the cutadapt command.
+    # Say, -u 13 -U 3 for original adapters. -j 8 -> use 8 threads.
+    cmd = f'cutadapt -A {adapter2} -a {adapter1}' + \
+    f' --pair-filter=any -u {bases_l5_to_move} -U {bases_l3_to_move}'
+    cmd += " -j " + str(wildcards.threads)
+
+
+    print('%' * 100)
+    cmd += r" --rename={id}__{r1.cut_prefix}-{r2.cut_prefix}|" + pcr_index + \
+    f' --too-short-output {fq}/umis_moved/too_short/{basename1}.gz'
+
+    cmd += f' --too-short-paired-output {fq}/umis_moved/too_short/{basename2}.gz'
+    cmd += f' --minimum-length {min_length} -o {output_r1} -p {output_r2}'
+    cmd += f' {input_r1} {input_r2}'
+
+    print(cmd)
+    return cmd
+        
 rule move_umis:
     input:
         in1 = [config['Fastq_folder'].rstrip('/') + f"/{pcr_index}R1.fastq.gz" for pcr_index in PCR_INDEX_SET],
@@ -317,50 +354,10 @@ rule move_umis:
         20
     conda:
         "envs/cutadapt.yml"
-    run:
-        print(f"PCR_INDEX_SET={PCR_INDEX_SET}")
-        print('threads:', threads)
-        # Parameters:
-        # E.g., AGATCGGAAGAGCGGTTCAGCAGGAATGCCGAGACCGATCTCGTATGCCGTCTTCTGCTT
-        adapter1 = config['cutadapt_r1_adapter_seq_to_trim']   
-        # E.g., TACCCTTCGCTTCACACACAAGGGGAAAGAGTGTAGATCTCGGTGGTCGC
-        adapter2 = config['cutadapt_r2_adapter_seq_to_trim']
-        # E.g., BBBBBBNNNNNNN. B=barcode base, N=UMI base.
-        l5_inline = config['L5_inline']
-        # E.g., BBBBBNNNNN
-        l3_inline = config['L3_inline']        
-        
-        fq = FASTQ_DIR
-        os.makedirs(f'{fq}/umis_moved/too_short/', exist_ok=True)
-        min_length = 14
-        
-        bases_l5_to_move = len(l5_inline)
-        bases_l3_to_move = len(l3_inline)
-        
-        for input_r1, input_r2, pcr_index, output_r1, output_r2 in zip(
-            input.in1, input.in2, PCR_INDEX_SET, output.out1, output.out2):
-            print(input_r1, "<-r1")
-            basename1 = os.path.splitext(os.path.basename(input_r1))[0]
-            basename2 = os.path.splitext(os.path.basename(input_r2))[0]
-
-            # Construct the cutadapt command.
-            # Say, -u 13 -U 3 for original adapters. -j 8 -> use 8 threads.
-            cmd = f'cutadapt -A {adapter2} -a {adapter1}' + \
-            f' --pair-filter=any -u {bases_l5_to_move} -U {bases_l3_to_move}'
-            cmd += " -j " + str(threads)
-
-
-            print('%' * 100)
-            cmd += r" --rename={id}__{r1.cut_prefix}-{r2.cut_prefix}|" + pcr_index + \
-            f' --too-short-output {fq}/umis_moved/too_short/{basename1}.gz'
-        
-            cmd += f' --too-short-paired-output {fq}/umis_moved/too_short/{basename2}.gz'
-            cmd += f' --minimum-length {min_length} -o {output_r1} -p {output_r2}'
-            cmd += f' {input_r1} {input_r2}'
-
-            print(cmd)
-            res = subprocess.check_output(cmd.split(' '))
-            res = res.decode()
+    params:
+        command_str = move_umi
+    shell:
+        command_str
         
 
 rule cut:
@@ -381,8 +378,8 @@ rule cut:
         out2 = expand(FASTQ_DIR + '/ready_to_map/{pcr_index}R2.fastq.gz', pcr_index=PCR_INDEX_SET),
     threads:
         20
-    conda:
-        "envs/cutadapt.yml"
+    #conda:
+    #    "envs/cutadapt.yml"
     run:
 
         bases_l5_to_move = len(str(params.l5_inline))
