@@ -222,19 +222,34 @@ class mappingMethods():
     def merge_repeats_and_genome(self, sf, prefix):
             # Combine the genomic reads and the reads mapping to repeats.
             # -f forces the merge even if merged_filename exists.
-            cmd = f'samtools merge -f {sf}/{prefix}all_reads.bam {sf}/{prefix}genome.filtered.bam {sf}/{prefix}repeats.filtered.bam'
+            cmd = f'samtools merge -f {sf}/{prefix}all_reads.bam'
+            cmd += f' {sf}/{prefix}rDNA.filtered.bam {sf}/{prefix}genome.filtered.bam'
+            cmd += f' {sf}/{prefix}repeats.filtered.bam'
             self.proclaim(cmd)
 
-            repeats, genome = f"{sf}/{prefix}repeats.filtered.bam", f"{sf}/{prefix}genome.filtered.bam"
+            rdna = f"{sf}/{prefix}rDNA.filtered.bam"
+            repeats = f"{sf}/{prefix}repeats.filtered.bam"
+            genome = f"{sf}/{prefix}genome.filtered.bam"
+            
+            self.proclaim(f"samtools view -o {sf}/{prefix}rDNA.header -H {rdna}") 
             self.proclaim(f"samtools view -o {sf}/{prefix}repeats.header -H {repeats}") 
             self.proclaim(f"samtools view -o {sf}/{prefix}genome.header -H {genome}")
+            
+            self.proclaim(f"samtools view -o {sf}/{prefix}rDNA.filtered.sam {rdna}")
             self.proclaim(f"samtools view -o {sf}/{prefix}repeats.filtered.sam {repeats}")
             self.proclaim(f"samtools view -o {sf}/{prefix}genome.filtered.sam {genome}")
 
             header = self.insert_sq_line(f"{sf}/{prefix}genome.header", self.grab_sq_line(f"{sf}/{prefix}repeats.header"))
             with open(f"{sf}/{prefix}combined.header.sam", 'w') as f:
                 f.write(header)
-            self.proclaim(f"cat {sf}/{prefix}combined.header.sam {sf}/{prefix}genome.filtered.sam {sf}/{prefix}repeats.filtered.sam > {sf}/{prefix}both.filtered.sam")
+            header = self.insert_sq_line(f"{sf}/{prefix}combined.header.sam",
+                                         self.grab_sq_line(f"{sf}/{prefix}rDNA.header"))
+            with open(f"{sf}/{prefix}combined.header.sam", 'w') as f:
+                f.write(header)
+            self.proclaim(
+                f"cat {sf}/{prefix}combined.header.sam {sf}/{prefix}genome.filtered.sam" + \
+                f" {sf}/{prefix}repeats.filtered.sam {sf}/{prefix}rDNA.filtered.sam" + \
+                f" > {sf}/{prefix}both.filtered.sam")
             self.proclaim(f"samtools view -o {sf}/{prefix}all_reads.bam {sf}/{prefix}both.filtered.sam")
             self.proclaim(f"samtools sort -o {sf}/{prefix}both.bam {sf}/{prefix}all_reads.bam")
             self.proclaim(f"mv {sf}/{prefix}both.bam {sf}/{prefix}all_reads.bam")

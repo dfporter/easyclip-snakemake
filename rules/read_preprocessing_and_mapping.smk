@@ -108,14 +108,14 @@ rule dedup_rDNA:
     conda:
         '../envs/umitools.yml'
     shell:
-        "umi_tools dedup --stdin={input.bam} --stdout={output.bam}"
+        'umi_tools dedup --stdin={input.bam} --stdout={output.bam} --umi-separator="__"'
         ' --log={output.log} --extract-umi-method=read_id;sleep 2;'
         "samtools index {output.bam}"
         
 rule mapping:
     input:
-        fq1 = expand(FASTQ_DIR + '/ready_to_map/{pcr_index}R1.fastq.gz', pcr_index=PCR_INDEX_SET),
-        fq2 = expand(FASTQ_DIR + '/ready_to_map/{pcr_index}R2.fastq.gz', pcr_index=PCR_INDEX_SET),
+        fq1 = expand(SAMS_DIR + '/{pcr_index}rDNA.Unmapped.out.mate1', pcr_index=PCR_INDEX_SET),
+        fq2 = expand(SAMS_DIR + '/{pcr_index}rDNA.Unmapped.out.mate2', pcr_index=PCR_INDEX_SET),
         star_repeats_genome = "assets/repeats_star_index/Genome",
     output:
         by_index = expand(SAMS_DIR + '/{pcr_index}all_reads.bam', pcr_index=PCR_INDEX_SET),
@@ -125,7 +125,7 @@ rule mapping:
     run:
         for input_r1, input_r2 in zip(input.fq1, input.fq2):
             
-            pcr_index = os.path.basename(input_r1).split('R1.fastq.gz')[0]           
+            pcr_index = os.path.basename(input_r1).split('rDNA.Unmapped.out.mate1')[0]           
 
             cmd = config['STAR']
             cmd += f" --genomeDir assets/repeats_star_index"
@@ -200,7 +200,7 @@ rule dedup:
     conda:
         '../envs/umitools.yml'
     shell:
-        "umi_tools dedup --stdin={input.bam} --stdout={output.bam}"
+        'umi_tools dedup --stdin={input.bam} --stdout={output.bam} --umi-separator="__"'
         ' --log={output.log} --extract-umi-method=read_id;sleep 1;'
         "samtools index {output.bam}"
         
