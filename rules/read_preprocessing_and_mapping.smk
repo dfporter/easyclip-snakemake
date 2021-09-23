@@ -264,6 +264,8 @@ rule second_adapter_trim:
         out2 = expand(FASTQ_DIR + '/second_cut/{pcr_index}R2.fastq.gz', pcr_index=PCR_INDEX_SET),
     threads:
         20
+    conda:
+        "envs/cutadapt.yml"
     run:
         # Parameters:
         # E.g., AGATCGGAAGAGCGGTTCAGCAGGAATGCCGAGACCGATCTCGTATGCCGTCTTCTGCTT
@@ -313,6 +315,8 @@ rule move_umis:
         out2 = expand(FASTQ_DIR + '/umis_moved/{pcr_index}R2.fastq.gz', pcr_index=PCR_INDEX_SET),
     threads:
         20
+    conda:
+        "envs/cutadapt.yml"
     run:
         print(f"PCR_INDEX_SET={PCR_INDEX_SET}")
         print('threads:', threads)
@@ -377,6 +381,8 @@ rule cut:
         out2 = expand(FASTQ_DIR + '/ready_to_map/{pcr_index}R2.fastq.gz', pcr_index=PCR_INDEX_SET),
     threads:
         20
+    conda:
+        "envs/cutadapt.yml"
     run:
 
         bases_l5_to_move = len(str(params.l5_inline))
