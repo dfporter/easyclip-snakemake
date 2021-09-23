@@ -75,6 +75,7 @@ rule all:
     input:
         "assets/reference/Dfam_curatedonly.embl",
         "assets/repeats_star_index/Genome",
+        "assets/rDNA_star_index/Genome",
         config['feature_gtf'],
         "assets/reference/featureCounts_formatted.gtf",
         "data/processed/features.db",
@@ -82,7 +83,8 @@ rule all:
         SAMS_DIR + '/all_reads.bam',
         expand(SAMS_DIR + "/split/{sample}.bam", sample=samples),
         expand(SAMS_DIR + "/dedup/{sample}.bam", sample=samples),
-        expand(BIGWIG + "/{sample}.bigwig", sample=samples),
+        expand(SAMS_DIR + '/rDNA_dedup/{sample}.bam', sample=samples),
+        #expand(BIGWIG + "/{sample}.bigwig", sample=samples),
         expand(SAMS_DIR + "/3end/{sample}.bam", sample=samples),
         expand(BIGWIG + "/3prime/{sample}.+.bigwig", sample=samples),
         expand(BIGWIG + "/3prime/{sample}.-.bigwig", sample=samples),

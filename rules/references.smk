@@ -43,7 +43,8 @@ rule create_features_db:
         
 rule get_chrom_sizes:
     input:
-        bam = SAMS_DIR + '/all_reads.bam'
+        bam = SAMS_DIR + '/all_reads.bam',
+        bai = SAMS_DIR + '/all_reads.bam.bai'
     output:
         fname = "data/processed/chrom.sizes"
     run:
@@ -75,6 +76,34 @@ rule create_featureCounts_formatted_gtf_from_regular_gtf:
         "assets/reference/featureCounts_formatted.gtf"
     shell:
         "python scripts/gtf_to_featureCounts_formatted_gtf.py {input} {output}"
+
+rule rDNA_gtf:
+    input:
+        rRNA_fa = "assets/reference/U13369_rRNA.fasta",
+        gff = "assets/reference/U13369_rRNA.gff",
+    output:
+        gtf = 'data/processed/U13369_rRNA.gtf',
+    shell:
+        'python scripts/make_rDNA_gtf.py {input.gff} {output.gtf}'
+
+rule mk_dir:
+    output:
+        "assets/rDNA_star_index/stops_error"
+    shell:
+        "mkdir -p assets/rDNA_star_index; touch assets/rDNA_star_index/stops_error"
+        
+rule rDNA_genome:
+    input:
+        fa = "assets/reference/U13369_rRNA.fasta",
+        gtf = 'data/processed/U13369_rRNA.gtf',
+        _dir = "assets/rDNA_star_index/stops_error"
+    output:
+        star_index = "assets/rDNA_star_index/Genome",
+    threads:
+        16
+    shell:
+        #"mkdir -p assets/rDNA_star_index/; " + \
+        config['STAR'] + " --genomeSAindexNbases 5 --limitGenomeGenerateRAM 100000000000 --runThreadN 16 --runMode genomeGenerate --genomeDir assets/rDNA_star_index --genomeFastaFiles {input.fa} --sjdbGTFfile {input.gtf} --sjdbOverhang 75"
         
 rule repeats_chromosome:
     input:
@@ -83,12 +112,14 @@ rule repeats_chromosome:
         fa = 'assets/reference/repeats_chrom.fa',
         gtf = 'assets/reference/repeats.gtf',
         repeats = 'assets/repeats_star_index/Genome',
+    threads:
+        16
     run:
         ep = scripts.make_repeats_chrom.emblParser(input.embl)
         entries_df = ep.parse()
         ep.write_as_chromosome()
         os.makedirs('assets/repeats_star_index/', exist_ok=True)
-        shell(config['STAR'] + f" --genomeSAindexNbases 5 --limitGenomeGenerateRAM 100000000000 --runThreadN 10 --runMode genomeGenerate --genomeDir assets/repeats_star_index --genomeFastaFiles {output.fa} --sjdbGTFfile {output.gtf} --sjdbOverhang 75")
+        shell(config['STAR'] + f" --genomeSAindexNbases 5 --limitGenomeGenerateRAM 100000000000 --runThreadN 16 --runMode genomeGenerate --genomeDir assets/repeats_star_index --genomeFastaFiles {output.fa} --sjdbGTFfile {output.gtf} --sjdbOverhang 75")
 # --genomeSAindexNbases 5 is well below the default 14. It speeds up the mapping to small genomes.
 
 rule download_dfam_annotation:
