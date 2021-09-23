@@ -122,7 +122,8 @@ class signal_RNAs():
         for gene_type, dict_of_beds in self.counts.items():
             gene = gene_type.split('::')[0]
 
-            if report_introns_separately and len(s := gene_type.split('::')) > 1:
+            if report_introns_separately and len(gene_type.split('::')) > 1:
+                s = gene_type.split('::')
                 if s[1] == 'intron':
                     intron_counts[gene] = dict_of_beds
                 else:

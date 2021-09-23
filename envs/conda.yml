@@ -1,9 +1,9 @@
 name: easyclip-env
 channels:
-  - conda-forge
+  #- conda-forge
   - bioconda
 dependencies:
-  - python=3.9.6
+  - python
   - numpy
   - dill
   - scipy

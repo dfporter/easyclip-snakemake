@@ -58,7 +58,8 @@ class peakFinder():
         pri = 100
 
         _type ,= self.rnas_obj.mRNAs[name].transcript_biotypes  # Unpack a singleton set.
-        (_type in self.priority) and (pri := self.priority.index(_type))
+        if _type in self.priority:
+            pri = self.priority.index(_type))
                     
         alt_pris = []
 

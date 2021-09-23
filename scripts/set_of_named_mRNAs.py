@@ -224,7 +224,8 @@ class set_of_named_mRNAs:
                     require_col_2_value=None):
         
         # Try to find a transcript id in this gtf line.
-        (name is None) and (name := self.get_name(line))
+        if name is None:
+            name = self.get_name(line)
 
         if name is None:
             return
@@ -238,20 +239,24 @@ class set_of_named_mRNAs:
             self.mRNAs[name].transcript_biotypes = set()
 
         # Add info from this line.
-        if (m := re.search('gene_id "([^"]+)"', line)) is not None:
+        m = re.search('gene_id "([^"]+)"', line)
+        if m is not None:
             self.mRNAs[name].gene_ids.add(m.group(1))
         else:
             print(f"No gene_id on line {line}")
 
-        if (m := re.search('gene_name "([^"]+)"', line)) is not None:
+        m = re.search('gene_name "([^"]+)"', line)
+        if m is not None:
             self.mRNAs[name].gene_names.add(m.group(1))
         else:
             print(f"No gene_name on line {line}")
         
-        if (m := re.search('transcript_type "([^"]+)"', line)) is not None:
+        m = re.search('transcript_type "([^"]+)"', line)
+        if m is not None:
             self.mRNAs[name].transcript_biotypes.add(m.group(1))
         
-        if (m := re.search('gene_type "([^"]+)"', line)) is not None:
+        m = re.search('gene_type "([^"]+)"', line)
+        if m is not None:
             self.mRNAs[name].gene_biotypes.add(m.group(1))
         
         self.mRNAs[name].add_gtf_line(line, require_col_2_value=require_col_2_value)

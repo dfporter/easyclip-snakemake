@@ -3,7 +3,28 @@ import scripts
 import scripts.build_genome_db
 import scripts.make_repeats_chrom
 
-
+rule download_genome_fasta:
+    output:
+        "assets/reference/GRCh38.primary_assembly.genome.fa"
+    shell:
+        "wget http://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_38/GRCh38.primary_assembly.genome.fa.gz;"
+        "unzip GRCh38.primary_assembly.genome.fa.gz;"
+        "mv GRCh38.primary_assembly.genome.fa assets/reference/"
+        
+rule files_for_igv_genome:
+    input:
+        combined_gff = 'data/processed/repeats_and_longest_txpt_per_gene.gff',
+        rDNA_gtf = 'data/processed/U13369_rRNA.gtf',
+        repeats_fa = 'assets/reference/repeats_chrom.fa',
+        rDNA_fa = "assets/reference/U13369_rRNA.fasta",
+        genome_fa = config['genomic_fasta'],
+    output:
+        fa = "data/processed/U13369_repeats_and_genome.fa",
+        gtf = "data/processed/U13369_repeats_and_genome.gtf",
+    run:
+        shell("cat {input.combined_gff} {input.rDNA_gtf} > {output.gtf}")
+        shell("cat {input.rDNA_fa} {input.genome_fa} {input.repeats_fa}  > {output.fa}")
+        
 #########################################################
 # References for mapped read->format conversion/gene assignment.
 #########################################################   
