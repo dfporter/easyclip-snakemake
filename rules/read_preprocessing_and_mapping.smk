@@ -92,11 +92,12 @@ rule split_rDNA:
 
         for input_r1, input_r2 in zip(input.fq1, input.fq2):
             
-            pcr_index = os.path.basename(input_r1).split('R1.fastq.gz')[0]  
-            
+            pcr_index = os.path.basename(input_r1).split('R1.fastq.gz')[0]
+            _barcode_to_fname = {k:v for k,v in barcode_to_fname.items() if k.split('|')[-1]==pcr_index}
+            _barcodes = [k for k in barcodes if k.split('|')[-1]==pcr_index]
             _in_bam = SAMS_DIR + f'/{pcr_index}rDNA.filtered.bam'
             scripts.split_bam.split_bam(
-                _in_bam, barcodes, barcode_to_fname, SAMS_DIR + "/rDNA_split/",
+                _in_bam, _barcodes, _barcode_to_fname, SAMS_DIR + "/rDNA_split/",
                 l5_inline_pattern=str(params.l5_inline), l3_inline_pattern=str(params.l3_inline))
             
             
