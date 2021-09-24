@@ -126,14 +126,6 @@ def split_bam(
             l5 = ''.join([l5[i] for i in l5_bc_pos])
             l3 = ''.join([l3[i] for i in l3_bc_pos])
             barcode = f"{l5}__{l3}|{pcr_index}"
-            
-            if random.randint(0, 10000) == 1:
-                print(f"{input_bam}: {rec.query_name}\n -> barcode = {barcode}")
-                if barcode in writer.outfiles:
-                    print(f"Found barcode in outfiles, writing to {writer.outfiles[barcode].filename}")
-                else:
-                    print(f"...not found in outfiles.")
-            
 
             writer.write_record_to_barcode(rec=rec, barcode=barcode)
         except KeyError:
