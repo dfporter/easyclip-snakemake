@@ -214,7 +214,7 @@ rule dedup:
         bam = SAMS_DIR + '/split_umis_fixed/{sample}.bam',
         bai = SAMS_DIR + '/split_umis_fixed/{sample}.bam.bai',
     output:
-        bam = SAMS_DIR + '/dedup/{sample}.bam',  # Input to clipper.
+        bam = SAMS_DIR + '/dedup/{sample}.bam', 
         log = SAMS_DIR + '/dedup/log/{sample}.log',
         bai = SAMS_DIR + '/dedup/{sample}.bam.bai',
     conda:
