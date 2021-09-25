@@ -84,8 +84,8 @@ rule all:
         expand(SAMS_DIR + "/split/{sample}.bam", sample=samples),
         expand(SAMS_DIR + "/dedup/{sample}.bam", sample=samples),
         expand(SAMS_DIR + '/rDNA_dedup/{sample}.bam', sample=samples),
-        #expand(BIGWIG + "/{sample}.bigwig", sample=samples),
-        expand(SAMS_DIR + "/3end/{sample}.bam", sample=samples),
+        expand(BIGWIG + "/{sample}.bigwig", sample=samples),
+        #expand(SAMS_DIR + "/3end/{sample}.bam", sample=samples),
         expand(BIGWIG + "/3prime/{sample}.+.bigwig", sample=samples),
         expand(BIGWIG + "/3prime/{sample}.-.bigwig", sample=samples),
         expand(SAMS_DIR + '/genome_only/{sample}.bam', sample=samples),
@@ -127,22 +127,24 @@ rule convert_to_3prime_bedgraph:
         shell("bedSort {output.plus} {output.plus}")
         shell("bedtools genomecov -bg -strand - -5 -ibam {input} > {output.minus}")
         shell("bedSort {output.minus} {output.minus}")
-        
-rule convert_bam_to_3prime_end_only:
-    """Not using. Not sure if this is correct."""
+
+rule convert_to_bedgraph:
     input:
         SAMS_DIR + "/dedup/{sample}.bam"
     output:
-        bam = SAMS_DIR + "/3end/{sample}.bam"
+        bdg = ex.file_paths['bedgraph'].rstrip('/') + "/full_read/{sample}.wig",  # Bedgraph. wig extension so IGV loads.
     run:
-        output_bam = str(output.bam)
-        sam_output = os.path.splitext(output_bam)[0] + '.sam'
-        shell("python scripts/convert_bam_to_RT_stop_only.py {input} {sam_output}")
-        shell("samtools view -Sb {sam_output} > {output_bam}")
-        shell("rm {sam_output}")
-        shell("samtools sort -o {output_bam}.sort {output_bam}")
-        shell("mv {output_bam}.sort {output_bam}")
-        shell("samtools index {output_bam}")
+        shell("bedtools genomecov -split -bg -ibam {input} > {output.bdg}")
+        shell("bedSort {output.bdg} {output.bdg}")
+        
+rule convert_full_read_bedgraph_to_BigWig:
+    input:
+        chrom_sizes = "data/processed/chrom.sizes",
+        bdg = ex.file_paths['bedgraph'].rstrip('/') + "/full_read/{sample}.wig",  # Bedgraph. wig extension so IGV loads.
+    output:
+        bigwig = BIGWIG + "/{sample}.bigwig"
+    run:
+        shell("bedGraphToBigWig {input.bdg} {input.chrom_sizes} {output.bigwig}")
         
 rule remove_non_chromosomal_reads:
     input:
@@ -152,7 +154,7 @@ rule remove_non_chromosomal_reads:
     run:
         shell("samtools view -b {input.bam} chr{{1..22}} > {output.bam}")
         
-       
+"""
 rule bamToBigwig:
     input:
         bams = SAMS_DIR + "/dedup/{sample}.bam"
@@ -161,3 +163,4 @@ rule bamToBigwig:
     shell:
         #"bamCoverage --binSize 10 -b {input} -o {output} -of bigwig"
         "bamCoverage --binSize 1 -b {input} -o {output} -of bigwig"
+"""

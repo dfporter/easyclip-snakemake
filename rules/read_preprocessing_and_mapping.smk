@@ -100,7 +100,6 @@ rule split_rDNA:
                 _in_bam, _barcodes, _barcode_to_fname, SAMS_DIR + "/rDNA_split/",
                 l5_inline_pattern=str(params.l5_inline), l3_inline_pattern=str(params.l3_inline))
             
-            
 rule dedup_rDNA:
     input:
         bam = SAMS_DIR + '/rDNA_split/{sample}.bam',
@@ -114,7 +113,7 @@ rule dedup_rDNA:
         'umi_tools dedup --stdin={input.bam} --stdout={output.bam} --umi-separator="__"'
         ' --log={output.log} --extract-umi-method=read_id;sleep 2;'
         "samtools index {output.bam}"
-        
+"""
 rule mapping:
     input:
         fq1 = expand(SAMS_DIR + '/{pcr_index}rDNA.Unmapped.out.mate1', pcr_index=PCR_INDEX_SET),
@@ -193,10 +192,27 @@ rule mapping:
         os.system(f"samtools sort {SAMS_DIR}/all_reads.unsorted.bam > {SAMS_DIR}/all_reads.bam")
         os.system(f"samtools index {SAMS_DIR}/all_reads.bam")
         os.system(f"rm {SAMS_DIR}/all_reads.unsorted.bam")
+"""
+
+rule fix_umis_in_read_names:
+    input:
+        bam = SAMS_DIR + '/split/{sample}.bam'
+    output:
+        bam = SAMS_DIR + '/split_umis_fixed/{sample}.bam',
+        bai = SAMS_DIR + '/split_umis_fixed/{sample}.bam.bai',
+    run:
+        # E.g., BBBBBBNNNNNNN. B=barcode base, N=UMI base.
+        l5_inline = config['L5_inline']
+        l5 = "".join([x if x=='N' else "F" for x in l5_inline])
+        # E.g., BBBBBNNNNN
+        l3_inline = config['L3_inline']
+        l3 = "".join([x if x=='N' else "F" for x in l3_inline])
+        shell("python scripts/edit_UMI.py -i {input.bam} -o {output.bam} --l5 {l5} --l3 {l3}")
         
 rule dedup:
     input:
-        bam = SAMS_DIR + '/split/{sample}.bam'
+        bam = SAMS_DIR + '/split_umis_fixed/{sample}.bam',
+        bai = SAMS_DIR + '/split_umis_fixed/{sample}.bam.bai',
     output:
         bam = SAMS_DIR + '/dedup/{sample}.bam',  # Input to clipper.
         log = SAMS_DIR + '/dedup/log/{sample}.log',
