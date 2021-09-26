@@ -113,7 +113,7 @@ rule dedup_rDNA:
         'umi_tools dedup --stdin={input.bam} --stdout={output.bam} --umi-separator="__"'
         ' --log={output.log} --extract-umi-method=read_id;sleep 2;'
         "samtools index {output.bam}"
-"""
+#"""
 rule mapping:
     input:
         fq1 = expand(SAMS_DIR + '/{pcr_index}rDNA.Unmapped.out.mate1', pcr_index=PCR_INDEX_SET),
@@ -192,7 +192,7 @@ rule mapping:
         os.system(f"samtools sort {SAMS_DIR}/all_reads.unsorted.bam > {SAMS_DIR}/all_reads.bam")
         os.system(f"samtools index {SAMS_DIR}/all_reads.bam")
         os.system(f"rm {SAMS_DIR}/all_reads.unsorted.bam")
-"""
+#"""
 
 rule fix_umis_in_read_names:
     input:
