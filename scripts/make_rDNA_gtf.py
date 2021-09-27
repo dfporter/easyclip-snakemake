@@ -53,7 +53,7 @@ def edit_gff(input_fname, output_fname):
     # Add a line to cover the non-transcribed, downstream region of the rDNA locus.
     genes = genes.append(
         {0: 'U13369.1', 1: 'Genbank', 2: 'gene', 3: 13351, 4: 42999, 5: '.', 6: '+', 7: '.',
-         8:f'''gene_id "{name}"; transcript_id "{name}"; gene_type "rRNA"; gene_name "{name}; exon_number 1;''',
+         8:f'''gene_id "{name}"; transcript_id "{name}"; gene_type "rRNA"; gene_name "{name}"; exon_number 1;''',
         "gbkey": "misc_RNA"}, ignore_index=True)
     
     # Add identical lines for transcripts and exons.

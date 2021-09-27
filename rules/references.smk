@@ -8,7 +8,7 @@ rule download_genome_fasta:
         "assets/reference/GRCh38.primary_assembly.genome.fa"
     shell:
         "wget http://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_38/GRCh38.primary_assembly.genome.fa.gz;"
-        "unzip GRCh38.primary_assembly.genome.fa.gz;"
+        "gunzip GRCh38.primary_assembly.genome.fa.gz;"
         "mv GRCh38.primary_assembly.genome.fa assets/reference/"
         
 rule files_for_igv_genome:
