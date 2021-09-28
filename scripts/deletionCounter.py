@@ -1,5 +1,5 @@
 import pandas, os, sys, typing, matplotlib, HTSeq, glob, pysam, collections, subprocess, pyBigWig, re, scipy, importlib
-import random
+import random, argparse
 import seaborn as sns
 import numpy as np
 
@@ -8,11 +8,7 @@ from pprint import pprint as pp
 from typing import List, Mapping, Union
 
 import matplotlib.pyplot as plt
-from liftover import get_lifter
 
-top = '/Users/dp/pma/'
-sys.path.append(top)
-import scripts
 
 class deletionCounter():
     
@@ -21,6 +17,7 @@ class deletionCounter():
         
     def write_deletion_positions_to_bedgraph(self, bamfilenames, interval=None, outdir='/Users/dp/pma/rbfox2_eCLIP_comparison/cims/'):
         # NDEL1: chr17:8,431,758-8,472,580
+        os.makedirs(outdir, exist_ok=True)
         
         iv = interval[:3]
         
@@ -41,7 +38,7 @@ class deletionCounter():
                     
             samfile.close()
             
-            ga.write_bedgraph_file(f"{outdir}/{os.path.basename(bamfilename).rstrip('.bam')}.wig", strand=interval[-1])
+            ga.write_bedgraph_file(f"{outdir}/" + os.path.basename(bamfilename).rstrip('.bam') + ".wig", strand=interval[-1])
             
             #arrs[bamfilename] = self._deletion_locations_for_intervals(bamfilename, intervals, outdir=outdir)
 
@@ -235,3 +232,26 @@ class deletionCounter():
         #print(deletions, deleted_bases, insertions, inserted_bases)
         #print([r.seq[x-5:x+2] for x in deletions])
         return deletions, deleted_bases, insertions, inserted_bases
+                                   
+if __name__ == '__main__':
+    
+    parser = argparse.ArgumentParser(description='Edit read names in a bam file to remove fixed sequences.')
+    parser.add_argument('-i', help='Folder of bam files.')
+    parser.add_argument('-f', help='Genomic fasta file.', default='None')
+    parser.add_argument('-o', help='Folder to write output bedgraphs to.')
+    parser.add_argument('--iv', help='Genomic interval in format 3:300-400/+.')
+    
+    args = parser.parse_args()
+    
+    if args.f == 'None':
+        args.f = None
+        
+    chrom = args.iv.split(':')[0]
+    strand = args.iv.split('/')[-1]
+    start, end = args.iv.split(':')[1].split('/')[0].split('-')
+    start, end = int(start.replace(',','')), int(end.replace(',',''))
+    args.iv = [chrom, start, end, strand]
+    
+    dc = deletionCounter(genomic_fasta=args.f)
+    dc.write_deletion_positions_to_bedgraph(
+        list(glob.glob(f"{args.i}/*bam")), interval=[chrom, start, end, strand], outdir=args.o)

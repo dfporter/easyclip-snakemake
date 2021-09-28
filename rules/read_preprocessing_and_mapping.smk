@@ -4,7 +4,8 @@ import scripts.split_bam
 
 #########################################################
 # Read mapping, splitting and duplicate removal. 
-#########################################################    
+#########################################################  
+#"""
 rule map_to_rDNA:
     input:
         fq1 = expand(FASTQ_DIR + '/ready_to_map/{pcr_index}R1.fastq.gz', pcr_index=PCR_INDEX_SET),
@@ -45,7 +46,7 @@ rule map_to_rDNA:
             mapper = scripts.mapping.mappingMethods()
             mapper.file_paths = {k:v for k,v in config.items()}
             mapper.filter_sort_and_index_bam(f"{SAMS_DIR}/{pcr_index}rDNA.sam")
-            
+#"""            
 rule split_rDNA:
     input:
         fq1 = expand(FASTQ_DIR + '/ready_to_map/{pcr_index}R1.fastq.gz', pcr_index=PCR_INDEX_SET),

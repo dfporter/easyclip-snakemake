@@ -29,13 +29,13 @@ def edit_gff(input_fname, output_fname):
             name = re.sub(' ', '_', name)
             name = re.sub("'", '', name)
             name = name.strip('"')
-            info = f'gene_id "{name}"; transcript_id "{name}"; gene_type "rRNA"; gene_name "{name}"; exon_number 1;"'
+            info = f'gene_id "{name}"; transcript_id "{name}"; gene_type "rRNA"; gene_name "{name}"; exon_number 1;'
             return info
         name = re.search('Note=([^;]+)', info)
         if name is not None:
             name = name.group(1)
             name = re.sub(' ', '_', name).strip('"')
-            info = f'gene_id "{name}"; transcript_id "{name}"; gene_type "rRNA"; gene_name "{name}"; exon_number 1;"'
+            info = f'gene_id "{name}"; transcript_id "{name}"; gene_type "rRNA"; gene_name "{name}"; exon_number 1;'
             return info
 
         return info
@@ -54,7 +54,7 @@ def edit_gff(input_fname, output_fname):
     genes = genes.append(
         {0: 'U13369.1', 1: 'Genbank', 2: 'gene', 3: 13351, 4: 42999, 5: '.', 6: '+', 7: '.',
          8:f'''gene_id "{name}"; transcript_id "{name}"; gene_type "rRNA"; gene_name "{name}"; exon_number 1;''',
-        "gbkey": "misc_RNA"}, ignore_index=True)
+        }, ignore_index=True)
     
     # Add identical lines for transcripts and exons.
     trxpt = genes.copy()

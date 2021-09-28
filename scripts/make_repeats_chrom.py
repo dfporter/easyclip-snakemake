@@ -50,8 +50,8 @@ class emblParser():
         for li in self.embl:
             if li[:len(id_pat)] == id_pat:
                 entry = self.parse_entry(li)
-                if entry['os'] in includes_humans \
-                and ('rRNA_' not in entry['nm']):
+                if entry['os'] in includes_humans:
+                #and ('rRNA_' not in entry['nm']):
                     self.entries.append(entry)
         self.embl.close()
         

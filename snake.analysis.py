@@ -13,7 +13,7 @@ python setup.py install
 conda install -c bioconda samtools=1.6 --force-reinstall
 '''
 
-import os, sys, re, glob, pandas, importlib, shutil, math, pysam, pickle
+import os, sys, re, glob, pandas, importlib, shutil, math, pysam, pickle, collections
 import numpy as np
 import scripts
 import scripts.exp
@@ -115,8 +115,14 @@ rule all:
         expand(SAMS_DIR + '/genome_only/{sample}.bam', sample=samples),
         control_bigwigs(),
         control_bigwigs_3prime(),
+        
+        exon_ht = expand(config['counts'].rstrip('/') + '/htseq_count_raw.exon.{sample}.txt', sample=samples),
+        intr_ht = expand(config['counts'].rstrip('/') + '/htseq_count_raw.intron.{sample}.txt', sample=samples),
+        #htseq_counts = expand(config['counts'].rstrip('/') + '/htseq_count_raw.{sample}.txt', sample=samples),
+        htseq_counts = config['counts'].rstrip('/') + '/htseq_count_raw.all.txt',
         bdg_plus = expand(ex.file_paths['bedgraph'].rstrip('/') + "/{sample}.+.wig",  sample=samples),
         bdg_minus = expand(ex.file_paths['bedgraph'].rstrip('/') + "/{sample}.-.wig", sample=samples),
+        
         control_per_million = "random_controls/counts/reads_per_million.bedgraphs.txt",
         control_counts = "random_controls/counts/counts.bedgraphs.txt",
         rna_data = TOP_DIR + '/data/rna.data',
@@ -393,6 +399,106 @@ rule remove_non_chromosomal_reads:
 #########################################################
 # Read to gene assignment.
 #########################################################
+rule reads_per_gene_from_htseq_exonic:
+    input:
+        gtf = "data/processed/U13369_repeats_and_genome.gtf",
+        bam = SAMS_DIR + "/dedup/{sample}.bam",
+        #bams = expand(SAMS_DIR + "/dedup/{sample}.bam", sample=samples)
+    output:
+        #txt = config['counts'].rstrip('/') + '/htseq_count_raw.txt'
+        txt = config['counts'].rstrip('/') + '/htseq_count_raw.exon.{sample}.txt',
+        sam = TOP_DIR + '/data/processed/htseq.{sample}.nonexonic.sam',
+    params:
+        _tmp = TOP_DIR + "/data/processed/htseq.{sample}.sam",
+    run:
+        # -s yes: stranded. Uses gene_id by default (ENSG for us).
+        shell("htseq-count -t exon --additional-attr=gene_name -s yes --format=bam" + \
+        " -o {params._tmp} {input.bam} {input.gtf} > {output.txt}")
+        shell("grep XF:Z:__no_feature {params._tmp} > {output.sam}")
+
+rule reheader_htseq_nonexonic_sam:
+    input:
+        bam = SAMS_DIR + "/dedup/{sample}.bam",
+        sam = TOP_DIR + '/data/processed/htseq.{sample}.nonexonic.sam',
+    output:
+        header = TOP_DIR + '/data/processed/bam_headers/{sample}.header.sam',
+        sam = TOP_DIR + '/data/processed/htseq.{sample}.nonexonic.header.sam',
+    #params:
+    #    _bam = TOP_DIR + '/data/processed/htseq.{sample}.nonexonic.noheader.sam'
+    run:
+        #shell("samtools view -sB {input.sam} > {params._bam}")
+        shell("samtools view -H {input.bam} > {output.header}")
+        shell("cat {output.header} {input.sam} > {output.sam}")
+        #shell("samtools sort {output.bam}.unsort > {output.bam}")
+        #shell("rm {output.bam}.unsort")
+        #shell("rm {params._bam}")
+        #shell("samtools index {output.bam}")
+        
+rule reads_per_gene_from_htseq_intronic:
+    input:
+        sam = TOP_DIR + '/data/processed/htseq.{sample}.nonexonic.header.sam',
+        gtf = "data/processed/U13369_repeats_and_genome.gtf",
+    output:
+        txt = config['counts'].rstrip('/') + '/htseq_count_raw.intron.{sample}.txt',
+    run:
+        shell("htseq-count -t intron --additional-attr=gene_name -s yes --format=sam" + \
+              " {input.sam} {input.gtf} > {output.txt}")
+
+rule reads_per_gene_from_htseq_combine_samples:
+    input:
+        exon = expand(config['counts'].rstrip('/') + '/htseq_count_raw.exon.{sample}.txt', sample=samples),
+        intron = expand(config['counts'].rstrip('/') + '/htseq_count_raw.intron.{sample}.txt', sample=samples),
+    output:
+        txt = config['counts'].rstrip('/') + '/htseq_count_raw.all.txt', 
+        xlsx = config['counts'].rstrip('/') + '/htseq_count_raw.all.xlsx',
+    run:
+        
+        def merge_counts_files(file_list, left_strip='htseq_count_raw.exon.', right_strip='.txt'):
+            dfs = [pandas.read_csv(
+                f, index_col=[0], sep='\t', header=None, names=['gene_id', 'gene_name', 
+                    os.path.basename(f).split(left_strip)[-1].split(right_strip)[0]]) \
+                    for f in file_list]
+
+            for df_ex in dfs:
+                df_ex.gene_name = [
+                        _name if (not pandas.isna(_name) and len(_name)) else _id \
+                            for _id, _name in zip(df_ex.index, df_ex.gene_name)]
+                df_ex.index = df_ex['gene_name']
+                del df_ex['gene_name']
+
+            print(dfs)
+            finaldf = pandas.concat(dfs, axis=1, join='inner').sort_index()
+
+            return finaldf
+        
+        exons = merge_counts_files(input.exon, left_strip='htseq_count_raw.exon.', right_strip='.txt')
+        introns = merge_counts_files(input.intron, left_strip='htseq_count_raw.intron.', right_strip='.txt')
+
+        exons.index = [x + '::exon' for x in exons.index]
+        introns.index = [x + '::intron' for x in introns.index]
+
+        both = pandas.concat([df_ex, df_intron])
+
+        both.to_csv(str(output.txt), sep='\t')
+        both.to_excel(str(output.xlsx), engine='openpyxl')
+        
+rule reads_per_gene_from_htseq_combine_exon_and_intron:
+    input:
+        exon = config['counts'].rstrip('/') + '/htseq_count_raw.exon.{sample}.txt',
+        intron = config['counts'].rstrip('/') + '/htseq_count_raw.intron.{sample}.txt',
+    output:
+        txt = config['counts'].rstrip('/') + '/htseq_count_raw.{sample}.txt'
+    run:
+        exon = pandas.read_csv("{input.exon}", header=None, index_col=None, sep='\t')
+        intron = pandas.read_csv("{input.intron}", header=None, index_col=None, sep='\t')
+        
+        for df in [exon, intron]:
+            df.columns = ["gene_id", "gene_name", "{sample}"]
+            df['gene_name'] = [_name if not pandas.isna(_name) else _id for _id, _name in zip(df.gene_id, df.gene_name)]
+        exon['gene_name'] = [x + '::exon' for x in exon.gene_name]
+        intron['gene_name'] = [x + '::intron' for x in intron.gene_name]
+        both = pandas.concat([exon, intron], ignore_index=True)
+        print(both)
         
 rule reads_per_gene_using_gffutils_bw:
     input:
@@ -500,22 +606,6 @@ rule convert_to_3prime_bedgraph:
         shell("bedtools genomecov -bg -strand - -5 -ibam {input} > {output.minus}")
         shell("bedSort {output.minus} {output.minus}")
         
-rule convert_bam_to_3prime_end_only:
-    """Not using. Not sure if this is correct."""
-    input:
-        SAMS_DIR + "/dedup/{sample}.bam"
-    output:
-        bam = SAMS_DIR + "/3end/{sample}.bam"
-    run:
-        output_bam = str(output.bam)
-        sam_output = os.path.splitext(output_bam)[0] + '.sam'
-        shell("python scripts/convert_bam_to_RT_stop_only.py {input} {sam_output}")
-        shell("samtools view -Sb {sam_output} > {output_bam}")
-        shell("rm {sam_output}")
-        shell("samtools sort -o {output_bam}.sort {output_bam}")
-        shell("mv {output_bam}.sort {output_bam}")
-        shell("samtools index {output_bam}")
-
 def scale_factor(wildcards):
     df = pandas.read_csv(config['data']+"/total_read_numbers.txt", sep='\t')
     df["basename"] = [x.split('/')[-1].split('.')[0] for x in df.Dataset]
