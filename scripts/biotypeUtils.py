@@ -34,14 +34,14 @@ def raw_read_counts_above_cutoff(nb, scheme, cutoff=10, protein_list=None):
     return above_cutoff
 
 
-def biotype_filter(df):
+def biotype_filter(df, biotype_col_name='Gene type'):
 
-    _types = set(df['Gene type'])
+    _types = set(df[biotype_col_name])
 
-    df.loc[:,'Gene type'] = [{True:'7SK', False:x}[bool(x=='RNA')] for x in df['Gene type']]
-    _types = set(df['Gene type'])
+    df.loc[:,biotype_col_name] = [{True:'7SK', False:x}[bool(x=='RNA')] for x in df[biotype_col_name]]
+    _types = set(df[biotype_col_name])
 
-    df.loc[:,'Gene type'] = [re.sub('.*/.*', 'Repetitive element', x) for x in df['Gene type']]
+    df.loc[:,biotype_col_name] = [re.sub('.*/.*', 'Repetitive element', x) for x in df[biotype_col_name]]
     #df['Gene type'] = [re.sub('LTR/.*', 'LTR', x) for x in df['Gene type']]
     #df['Gene type'] = [re.sub('DNA/hAT.*', 'DNA/hAT', x) for x in df['Gene type']]
     verboten_types = [

@@ -120,6 +120,9 @@ rule all:
         intr_ht = expand(config['counts'].rstrip('/') + '/htseq_count_raw.intron.{sample}.txt', sample=samples),
         #htseq_counts = expand(config['counts'].rstrip('/') + '/htseq_count_raw.{sample}.txt', sample=samples),
         htseq_counts = config['counts'].rstrip('/') + '/htseq_count_raw.all.txt',
+        htseq_txt = config['counts'].rstrip('/') + '/htseq_count_rpm.all.txt', 
+        htseq_xlsx = config['counts'].rstrip('/') + '/htseq_count_rpm.all.xlsx', 
+        
         bdg_plus = expand(ex.file_paths['bedgraph'].rstrip('/') + "/{sample}.+.wig",  sample=samples),
         bdg_minus = expand(ex.file_paths['bedgraph'].rstrip('/') + "/{sample}.-.wig", sample=samples),
         
@@ -385,8 +388,6 @@ def bam_files_of_protein(protein):
     _sample_names = [x for x in samples if protein_in_fname(x).upper()==protein.upper()]
     return [TOP_DIR + f'/sams/dedup/{x}.bam' for x in _sample_names]  
 
-
-
         
 rule remove_non_chromosomal_reads:
     input:
@@ -395,6 +396,45 @@ rule remove_non_chromosomal_reads:
         bam = SAMS_DIR + '/genome_only/{sample}.bam',
     run:
         shell("samtools view -b {input.bam} chr{{1..22}} > {output.bam}")
+
+rule biotype_lookup_file:
+    input:
+        "data/processed/U13369_repeats_and_genome.gtf",
+    output:
+        "data/processed/biotype_lookup.txt"
+    run:
+        df = pandas.read_csv(
+            "data/processed/U13369_repeats_and_genome.gtf",
+            sep='\t', comment='#', header=None)
+
+        def parse(li):
+            de = lambda x: x.group(1) if x is not None else 'Unknown'
+            biotype = re.search('gene_type "([^"]+)"', li)
+            gene_name = re.search('gene_name "([^"]+)"', li)
+            gene_id = re.search('gene_id "([^"]+)"', li)
+            return (de(gene_id), de(gene_name), de(biotype))
+
+        lookup = [parse(x) for x in df[8]]
+
+        def corrections(name, biotype):
+            if 'tRNA' in name:
+                return 'tRNA'
+            if name=='LSU-rRNA_Hsa' or name=='SSU-rRNA_Hsa':
+                return 'rRNA'
+            if name in [f"U{n}" for n in range(1,18)]:
+                return 'snRNA'
+            if 'transcribed_spacer' in name:
+                return 'pre-rRNA'
+            if name == '7SK':
+                return '7SK'
+            if 'rRNA_Cel' in name:
+                return 'Unknown'
+            return biotype
+        
+        lookup = pandas.DataFrame(lookup, columns=['gene_id', 'gene_name', 'gene_type'])
+        lookup = lookup.drop_duplicates()
+        lookup['gene_type'] = [corrections(x,y) for x,y in zip(lookup.gene_name, lookup.gene_type)]
+        lookup.to_csv("data/processed/biotype_lookup.txt", sep='\t', index=False)
         
 #########################################################
 # Read to gene assignment.
@@ -423,16 +463,10 @@ rule reheader_htseq_nonexonic_sam:
     output:
         header = TOP_DIR + '/data/processed/bam_headers/{sample}.header.sam',
         sam = TOP_DIR + '/data/processed/htseq.{sample}.nonexonic.header.sam',
-    #params:
-    #    _bam = TOP_DIR + '/data/processed/htseq.{sample}.nonexonic.noheader.sam'
     run:
-        #shell("samtools view -sB {input.sam} > {params._bam}")
         shell("samtools view -H {input.bam} > {output.header}")
         shell("cat {output.header} {input.sam} > {output.sam}")
-        #shell("samtools sort {output.bam}.unsort > {output.bam}")
-        #shell("rm {output.bam}.unsort")
-        #shell("rm {params._bam}")
-        #shell("samtools index {output.bam}")
+
         
 rule reads_per_gene_from_htseq_intronic:
     input:
@@ -443,6 +477,12 @@ rule reads_per_gene_from_htseq_intronic:
     run:
         shell("htseq-count -t intron --additional-attr=gene_name -s yes --format=sam" + \
               " {input.sam} {input.gtf} > {output.txt}")
+        
+def list_duplicates(seq):
+    tally = collections.defaultdict(list)
+    for i,item in enumerate(seq):
+        tally[item].append(i)
+    return ((key,locs) for key,locs in tally.items() if len(locs)>1)
 
 rule reads_per_gene_from_htseq_combine_samples:
     input:
@@ -458,15 +498,24 @@ rule reads_per_gene_from_htseq_combine_samples:
                 f, index_col=[0], sep='\t', header=None, names=['gene_id', 'gene_name', 
                     os.path.basename(f).split(left_strip)[-1].split(right_strip)[0]]) \
                     for f in file_list]
-
+        
             for df_ex in dfs:
+                
                 df_ex.gene_name = [
                         _name if (not pandas.isna(_name) and len(_name)) else _id \
                             for _id, _name in zip(df_ex.index, df_ex.gene_name)]
+                
+                # Check for duplicate gene ids. Cannot merge with non-unique index.
+                for dup, locs in list_duplicates(df_ex.gene_name):
+                    nameA, nameB = df_ex.iloc[locs[0]].name, df_ex.iloc[locs[0]].name
+                    print(f"Duplicate names for {dup} at {locs}. Using gene_ids {nameA} and {nameB}")
+                    df_ex.loc[nameA, 'gene_name'] = nameA
+                    df_ex.loc[nameB, 'gene_name'] = nameB
+                    
+                dups = list_duplicates(df_ex.gene_name)
                 df_ex.index = df_ex['gene_name']
                 del df_ex['gene_name']
-
-            print(dfs)
+                            
             finaldf = pandas.concat(dfs, axis=1, join='inner').sort_index()
 
             return finaldf
@@ -477,10 +526,27 @@ rule reads_per_gene_from_htseq_combine_samples:
         exons.index = [x + '::exon' for x in exons.index]
         introns.index = [x + '::intron' for x in introns.index]
 
-        both = pandas.concat([df_ex, df_intron])
+        both = pandas.concat([exons, introns])
 
         both.to_csv(str(output.txt), sep='\t')
         both.to_excel(str(output.xlsx), engine='openpyxl')
+
+rule reads_per_gene_from_htseq_normalize:
+    input:
+        total_reads = config['data'] + "/total_read_numbers.txt",
+        txt = config['counts'].rstrip('/') + '/htseq_count_raw.all.txt', 
+    output:
+        txt = config['counts'].rstrip('/') + '/htseq_count_rpm.all.txt', 
+        xlsx = config['counts'].rstrip('/') + '/htseq_count_rpm.all.xlsx', 
+    run:
+        df = pandas.read_csv(str(input.txt), sep='\t', index_col=0)
+        per_mill = pandas.read_csv(str(input.total_reads), sep='\t', index_col=0)
+        
+        for col in df.columns:
+            df[col] = df[col] * 1E6/per_mill.loc[col, 'Total read number']
+            
+        df.to_csv(str(output.txt), sep='\t')
+        df.to_excel(str(output.xlsx), engine='openpyxl')
         
 rule reads_per_gene_from_htseq_combine_exon_and_intron:
     input:

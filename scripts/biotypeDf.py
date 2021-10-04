@@ -93,7 +93,7 @@ class biotypeDf():
 
     def only_biotypes_with_enough_reads(self, minimum_reads=5000):
         ok_biotypes = scripts.biotyper.biotyper.biotypes_with_enough_reads(
-        	self.df, cutoff=minimum_reads)
+            self.df, cutoff=minimum_reads)
         self.df = self.df[[
             (x in ok_biotypes) for x in self.df[self.type_col].tolist()
         ]].copy()
