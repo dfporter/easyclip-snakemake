@@ -16,6 +16,20 @@ class scheme():
         li += str(self.scheme_df)
         return li
     
+    def __add__(self, scheme_to_add):
+        """Combine with a second scheme object and return the combination."""
+        self.scheme_df = pandas.concat(
+            [self.scheme_df, scheme_to_add.scheme_df], axis=0, ignore_index=True, sort=False)
+        self.generate_mappings()
+        self.set_long_form_filenames()
+
+        if 'Gene' in self.scheme_df.columns:
+            self.proteins = set(self.scheme_df['Gene'].tolist())
+        if 'Protein' in self.scheme_df.columns:
+            self.proteins = set(self.scheme_df['Proetin'].tolist())
+
+        return self
+    
     def fill_in_info_column_by_filename(self, col_name, dict_by_fname):
         basenames = [os.path.splitext(os.path.basename(x))[0] for x in self.scheme_df['long_fname_R1']]
         self.scheme_df[col_name] = [
@@ -171,7 +185,7 @@ class scheme():
         reload_file=False):
 
         if reload_file or not(hasattr(self, 'xl_by_prot_from_file')):
-            xl = pandas.read_excel(xl_rate_fname)
+            xl = pandas.read_excel(xl_rate_fname, engine='openpyxl')
             xl = xl[xl['Label']=='% XL (minimal region)'].copy()
             self.xl_by_prot_from_file = xl.groupby('Protein').mean().to_dict()['Value']
 

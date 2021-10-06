@@ -103,9 +103,6 @@ rule all:
         "assets/reference/featureCounts_formatted.gtf",
         "data/processed/features.db",
         "data/processed/repeats_and_longest_txpt_per_gene.bed",
-        SAMS_DIR + '/all_reads.bam',
-        expand(SAMS_DIR + "/split/{sample}.bam", sample=samples),
-        expand(SAMS_DIR + "/dedup/{sample}.bam", sample=samples),
         expand(BIGWIG + "/{sample}.bigwig", sample=samples),
         expand(BIGWIG + "/rpm/{sample}.bigwig", sample=samples),
         #expand(SAMS_DIR + "/3end/{sample}.bam", sample=samples),
@@ -261,8 +258,12 @@ rule combine_pvals_and_other_gene_information:
         
 rule reads_per_gene_statistics_vs_controls:
     input:
-        counts = TOP_DIR + '/outs/counts/counts.bedgraphs.txt',
-        random_counts = 'random_controls/counts/counts.bedgraphs.txt',
+        #counts = TOP_DIR + '/outs/counts/counts.bedgraphs.txt',
+        counts = TOP_DIR + '/outs/counts/htseq_count_raw.all.txt',
+        #random_counts = 'random_controls/counts/counts.bedgraphs.txt',
+        random_counts = 'random_controls/counts/htseq_count_raw.all.txt',
+        cntrl_total_reads = 'random_controls/data/total_read_numbers.txt',
+        total_reads = TOP_DIR + '/data/total_read_numbers.txt',
     output:
         pvals_per_read = TOP_DIR + "/tables/pvals_per_read.xlsx",
     run:
@@ -275,7 +276,7 @@ rule reads_per_gene_statistics_vs_controls:
         negative_metadata = SimpleNamespace(**{
             'scheme_file_with_random_proteins': 'random_controls/samples.txt',
             'top_dir': 'random_controls',
-            'ann_counts_file': 'random_controls/counts/counts.bedgraphs.txt',
+            'ann_counts_file': str(input.random_counts),
             'random_proteins': list(set(pandas.read_csv('random_controls/samples.txt', sep='\t')['Gene'])),
         })
 

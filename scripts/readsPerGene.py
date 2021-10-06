@@ -44,6 +44,13 @@ class readsPerGene():
             self.scheme = scripts.scheme.scheme(scheme_filename)
             self.edit()
 
+    def __add__(self, rpg_to_add):
+        """Combine dataframe with another rpg object and return the combination."""
+        self.df = self.df.merge(rpg_to_add.df, left_index=True, right_index=True, how='inner')
+        if self.scheme is not None:
+            self.scheme = self.scheme + rpg_to_add.scheme
+        return self
+    
     def edit(self, black_list=None, verbose=False, save=False,
         save_to=None, xl_rate_fname='percentCrosslinked.xlsx',
         mapping_fname='enst_transcript_id_name_biotype_map.txt',
@@ -57,10 +64,10 @@ class readsPerGene():
         self.df = self.df.loc[:, [x for x in self.df.columns if not any(b in x for b in self.black_list)]]
 
         # Remove columns we can't match to proteins in the scheme.
-        print(f"Columns before matching with scheme: {self.df.columns}")
+        if verbose: print(f"Columns before matching with scheme: {self.df.columns}")
         self.df = self.df.loc[:, [x for x in self.df.columns if (
             x in ['Gene type', 'gene_name'] or self.scheme.gene_from_fname(x))]]  # '' is False
-        print(f"After filtering: {self.df.columns}")
+        if verbose: print(f"After filtering: {self.df.columns}")
         self.df.fillna(0, inplace=True)
 
     def add_biotypes_column(
@@ -68,21 +75,21 @@ class readsPerGene():
         df=None, reload=False, gtf_filename='combined.gtf'):
         """
         Expect a mapping file with this format:
-        transcript_id   gene_name   transcript_biotype
+        gene_id   gene_name   gene_type
         ENST00000456328 DDX11L1 processed_transcript
         ENST00000450305 DDX11L1 transcribed_unprocessed_pseudogene
         ENST00000488147 WASH7P  unprocessed_pseudogene
         """
         
-        if (not os.path.exists(mapping_fname)) or reload:
+        #if (not os.path.exists(mapping_fname)) or reload:
             
-            scripts.biotypeLookupFileMaker.make_enst_gene_name_biotype_map_file(
-                gtf_filename=gtf_filename, out_filename=mapping_fname)
+        #    scripts.biotypeLookupFileMaker.make_enst_gene_name_biotype_map_file(
+        #        gtf_filename=gtf_filename, out_filename=mapping_fname)
 
         if (not hasattr(self, 'to_biotypes')) or reload:
             print(f"Loading {os.path.realpath(mapping_fname)} for biotype lookup.")
             to_biotypes_df = pandas.read_csv(mapping_fname, sep='\t', index_col=None)
-            self.to_biotypes = dict(zip(to_biotypes_df['gene_name'], to_biotypes_df['transcript_biotype']))            
+            self.to_biotypes = dict(zip(to_biotypes_df['gene_name'], to_biotypes_df['gene_type']))            
 
         print("Adding biotypes.")
 
@@ -223,7 +230,14 @@ class readsPerMillion(readsPerGene):
         self.scheme = raw_reads_per_gene.scheme
 
         self.normalize_to_per_million_reads(raw_reads_per_gene.df)
-
+        
+    def __add__(self, rpm_to_add):
+        """Combine dataframe with another rpm object and return the combination."""
+        self.df = self.df.merge(rpm_to_add.df, left_index=True, right_index=True, how='inner')
+        if self.scheme is not None:
+            self.scheme = self.scheme + rpm_to_add.scheme
+        return self
+    
     def get_total_reads(self, folder_name, load=False):
         
         if load:            
