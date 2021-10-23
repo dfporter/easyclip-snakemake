@@ -1,6 +1,7 @@
 from typing import Mapping, List
 import os, glob
 
+
 def for_split_bedgraph_lines(fname: str) -> List:
     with open(fname) as f:
         next(f)  # Skip header.
@@ -15,6 +16,7 @@ def get_auc(fname: str) -> float:
         auc += (s[2] - s[1]) * float(s[3])
     
     return auc
+
 
 def total_read_numbers(folder: str, outfile='./data/') -> Mapping[str, float]:
     """Total area under the curve for bedgraphs in a folder.

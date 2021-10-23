@@ -1,9 +1,9 @@
 
 top_dir = '/oak/stanford/groups/khavari/users/dfporter/seq/all/'
 top_dir = '/Users/dfporter/pma/dataAndScripts/clip/miseq/Runs/hiseq_pcbp1_190416/'
-top_dir = '/Users/dp/pma/dataAndScripts/clip/meta/'
+top_dir = 'pos1/'
 
-scheme_file = top_dir + '/scheme.xlsx'
+scheme_file = top_dir + '/samples.txt'
 ann_counts_file = top_dir + '/ann_counts.txt'
 bed_file_dir = top_dir + '/beds/'
 

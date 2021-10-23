@@ -1,4 +1,5 @@
-import HTSeq, collections, pandas, os, re, dill, importlib, random, glob
+import HTSeq, collections, pandas, os, re#, dill
+import importlib, random, glob
 import numpy as np
 
 import scripts

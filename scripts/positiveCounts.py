@@ -1,4 +1,5 @@
-import HTSeq, collections, pandas, os, re, dill, importlib
+import HTSeq, collections, pandas, os, re #dill,
+import importlib
 import numpy as np
 import scripts
 import scripts.countsO
