@@ -1,4 +1,4 @@
-import HTSeq, collections, pandas, os, re #dill,
+import HTSeq, collections, pandas, os, re, dill
 import importlib
 import numpy as np
 import scripts

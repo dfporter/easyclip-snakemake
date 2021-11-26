@@ -86,10 +86,18 @@ class readsPerGene():
         #    scripts.biotypeLookupFileMaker.make_enst_gene_name_biotype_map_file(
         #        gtf_filename=gtf_filename, out_filename=mapping_fname)
 
+        # Create a lookup dictionary from the mapping text file.
         if (not hasattr(self, 'to_biotypes')) or reload:
             print(f"Loading {os.path.realpath(mapping_fname)} for biotype lookup.")
             to_biotypes_df = pandas.read_csv(mapping_fname, sep='\t', index_col=None)
-            self.to_biotypes = dict(zip(to_biotypes_df['gene_name'], to_biotypes_df['gene_type']))            
+            if 'gene_type' in to_biotypes_df.columns:
+                self.to_biotypes = dict(zip(to_biotypes_df['gene_name'], to_biotypes_df['gene_type']))      
+            elif ('transcript_biotype' in to_biotypes_df.columns):
+                print(f"Warning: added biotype to genes from {mapping_fname} but found only transcript_biotype column.")
+                self.to_biotypes = dict(zip(to_biotypes_df['gene_name'], to_biotypes_df['transcript_biotype']))
+            else:
+                raise ValueError(
+                    f"Tried to add biotypes from {mapping_fname} but did not find expected column names *_biotype.")
 
         print("Adding biotypes.")
 

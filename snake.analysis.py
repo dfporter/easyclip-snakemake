@@ -109,7 +109,7 @@ rule all:
         #config['counts'].rstrip('/') + "/bigwig_3prime_counts_transcripts.txt",
         #config['counts'].rstrip('/') + "/bam_3prime_counts_transcripts.txt",
         #config['counts'].rstrip('/') + "/featureCounts_on_bams.txt",
-        expand(SAMS_DIR + '/genome_only/{sample}.bam', sample=samples),
+        #expand(SAMS_DIR + '/genome_only/{sample}.bam', sample=samples),
         control_bigwigs(),
         control_bigwigs_3prime(),
         
