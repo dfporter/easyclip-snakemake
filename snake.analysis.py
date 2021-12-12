@@ -80,15 +80,15 @@ def protein_in_fname(fname):
 
 def control_bigwigs():
     _df = pandas.read_csv("random_controls/samples.txt", sep='\t')
-    return [f"random_controls/bigwig/{exp}_{gene}_{l5}_{l3}.bigwig" for \
-            exp,gene,l5,l3 in zip(_df.Experiment, _df.Gene, _df.L5_BC, _df.L3_BC)]
+    return [f"random_controls/bigwig/{exp}_{gene}_{rep}_{l5}_{l3}.bigwig" for \
+            exp,gene,rep,l5,l3 in zip(_df.Experiment, _df.Gene, _df.Replicate, _df.L5_BC, _df.L3_BC)]
 
 def control_bigwigs_3prime():
     _df = pandas.read_csv("random_controls/samples.txt", sep='\t')
-    plus = [f"random_controls/bigwig/3prime/{exp}_{gene}_{l5}_{l3}.+.bigwig" for \
-            exp,gene,l5,l3 in zip(_df.Experiment, _df.Gene, _df.L5_BC, _df.L3_BC)]
-    minus = [f"random_controls/bigwig/3prime/{exp}_{gene}_{l5}_{l3}.-.bigwig" for \
-            exp,gene,l5,l3 in zip(_df.Experiment, _df.Gene, _df.L5_BC, _df.L3_BC)]
+    plus = [f"random_controls/bigwig/3prime/{exp}_{gene}_{rep}_{l5}_{l3}.+.bigwig" for \
+            exp,gene,rep,l5,l3 in zip(_df.Experiment, _df.Gene, _df.Replicate, _df.L5_BC, _df.L3_BC)]
+    minus = [f"random_controls/bigwig/3prime/{exp}_{gene}_{rep}_{l5}_{l3}.-.bigwig" for \
+            exp,gene,rep,l5,l3 in zip(_df.Experiment, _df.Gene, _df.Replicate, _df.L5_BC, _df.L3_BC)]
     return plus + minus
 
 #########################################################
@@ -123,8 +123,7 @@ rule all:
         bdg_plus = expand(ex.file_paths['bedgraph'].rstrip('/') + "/{sample}.+.wig",  sample=samples),
         bdg_minus = expand(ex.file_paths['bedgraph'].rstrip('/') + "/{sample}.-.wig", sample=samples),
         
-        control_per_million = "random_controls/counts/reads_per_million.bedgraphs.txt",
-        control_counts = "random_controls/counts/counts.bedgraphs.txt",
+        control_counts = "random_controls/counts/htseq_count_raw.all.txt",
         rna_data = TOP_DIR + '/data/rna.data',
         counts = TOP_DIR + '/outs/counts/ann_counts.bedgraphs.txt',
         reads_per_million = TOP_DIR + '/outs/counts/reads_per_million.bedgraphs.txt',
@@ -600,18 +599,19 @@ rule featureCounts_on_bams:
 rule download_control_data:
     output:
         per_million = "random_controls/counts/reads_per_million.bedgraphs.txt",
-        counts = "random_controls/counts/counts.bedgraphs.txt",
+        counts = "random_controls/counts/htseq_count_raw.all.txt",
         bigwigs = control_bigwigs(),
         bigwig_3prime = control_bigwigs_3prime(),
     run:
 
         os.makedirs("random_controls/bigwig/3prime", exist_ok=True)
+        os.makedirs("random_controls/counts/", exist_ok=True)
 
-        shell(f"wget http://khavarilab.stanford.edu/s/random_non_RBP_control_countstar.gz")
-        shell("mv random_non_RBP_control_countstar.gz random_non_RBP_control_counts.tar.gz")
-        shell("tar -xf random_non_RBP_control_counts.tar.gz -C random_controls/counts/")
-        shell("mv random_controls/counts/counts/* random_controls/counts/")
-        shell("rmdir random_controls/counts/counts/")
+        shell(f"wget http://khavarilab.stanford.edu/s/htseq_count_rawall.txt")
+        shell("mv htseq_count_rawall.txt random_controls/counts/htseq_count_raw.all.txt")
+        #shell("tar -xf random_non_RBP_control_counts.tar.gz -C random_controls/counts/")
+        #shell("mv random_controls/counts/counts/* random_controls/counts/")
+        #shell("rmdir random_controls/counts/counts/")
         
         shell("sleep 10")
         shell(f"wget http://khavarilab.stanford.edu/s/random_non_RBP_control_bigwig_cDNA_end_1tar.gz")
@@ -640,7 +640,13 @@ rule download_control_data:
         shell("tar -xf random_non_RBP_control_bigwigs_2.tar.gz -C random_controls/bigwig/")
         shell("mv random_controls/bigwig/bigwig_group2/* random_controls/bigwig/")
         shell("rmdir random_controls/bigwig/bigwig_group2/")
-        
+
+        shell("sleep 10")
+        shell(f"wget http://khavarilab.stanford.edu/s/random_non_RBP_control_bigwigs_3tar.gz")
+        shell("mv random_non_RBP_control_bigwigs_3tar.gz random_non_RBP_control_bigwigs_3.tar.gz")
+        shell("tar -xf random_non_RBP_control_bigwigs_3.tar.gz -C random_controls/bigwig/")
+        shell("mv random_controls/bigwig/bigwig_group3/* random_controls/bigwig/")
+        shell("rmdir random_controls/bigwig/bigwig_group3/")        
 #########################################################
 # Mapped read format conversions.
 #########################################################            
