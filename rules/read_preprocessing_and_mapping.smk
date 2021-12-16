@@ -319,7 +319,6 @@ rule second_adapter_trim:
             cmd += f' --minimum-length {min_length} -o {output_r1} -p {output_r2}'
             cmd += f' {input_r1} {input_r2}'
 
-            print('%' * 100)
             print(cmd)
             res = subprocess.check_output(cmd.split(' '))
             res = res.decode()
@@ -357,7 +356,6 @@ rule move_umis:
         
         for input_r1, input_r2, pcr_index, output_r1, output_r2 in zip(
             input.in1, input.in2, PCR_INDEX_SET, output.out1, output.out2):
-            print(input_r1, "<-r1")
             basename1 = os.path.splitext(os.path.basename(input_r1))[0]
             basename2 = os.path.splitext(os.path.basename(input_r2))[0]
 
@@ -368,7 +366,6 @@ rule move_umis:
             cmd += " -j " + str(threads)
 
 
-            print('%' * 100)
             cmd += r" --rename={id}__{r1.cut_prefix}-{r2.cut_prefix}|" + pcr_index + \
             f' --too-short-output {fq}/umis_moved/too_short/{basename1}.gz'
         

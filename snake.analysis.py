@@ -598,7 +598,7 @@ rule featureCounts_on_bams:
 
 rule download_control_data:
     output:
-        per_million = "random_controls/counts/reads_per_million.bedgraphs.txt",
+        #per_million = "random_controls/counts/reads_per_million.bedgraphs.txt",
         counts = "random_controls/counts/htseq_count_raw.all.txt",
         bigwigs = control_bigwigs(),
         bigwig_3prime = control_bigwigs_3prime(),
@@ -617,36 +617,41 @@ rule download_control_data:
         shell(f"wget http://khavarilab.stanford.edu/s/random_non_RBP_control_bigwig_cDNA_end_1tar.gz")
         shell("mv random_non_RBP_control_bigwig_cDNA_end_1tar.gz random_non_RBP_control_bigwig_cDNA_end_1.tar.gz")
         shell("tar -xf random_non_RBP_control_bigwig_cDNA_end_1.tar.gz -C random_controls/bigwig/3prime/")
-        shell("mv random_controls/bigwig/3prime/bigwig_3prime_1/* random_controls/bigwig/3prime/")
-        shell("rmdir random_controls/bigwig/3prime/bigwig_3prime_1/")
+        shell("mv random_controls/bigwig/3prime/zips1/* random_controls/bigwig/3prime/")
+        shell("rm random_controls/bigwig/3prime/zips1/._*")
+        shell("rmdir random_controls/bigwig/3prime/zips1/")
         
         shell("sleep 10")
         shell(f"wget http://khavarilab.stanford.edu/s/random_non_RBP_control_bigwig_cDNA_end_2tar.gz")
         shell("mv random_non_RBP_control_bigwig_cDNA_end_2tar.gz random_non_RBP_control_bigwig_cDNA_end_2.tar.gz")
         shell("tar -xf random_non_RBP_control_bigwig_cDNA_end_2.tar.gz -C random_controls/bigwig/3prime/")
-        shell("mv random_controls/bigwig/3prime/bigwig_3prime_2/* random_controls/bigwig/3prime/")
-        shell("rmdir random_controls/bigwig/3prime/bigwig_3prime_2/")
+        shell("mv random_controls/bigwig/3prime/zips2/* random_controls/bigwig/3prime/")
+        shell("rm random_controls/bigwig/3prime/zips2/._*")
+        shell("rmdir random_controls/bigwig/3prime/zips2/")
         
         shell("sleep 10")
         shell(f"wget http://khavarilab.stanford.edu/s/random_non_RBP_control_bigwigs_1tar.gz")
         shell("mv random_non_RBP_control_bigwigs_1tar.gz random_non_RBP_control_bigwigs_1.tar.gz")
         shell("tar -xf random_non_RBP_control_bigwigs_1.tar.gz -C random_controls/bigwig/")
-        shell("mv random_controls/bigwig/bigwig_group1/* random_controls/bigwig/")
-        shell("rmdir random_controls/bigwig/bigwig_group1/")
+        shell("mv random_controls/bigwig/zips1/* random_controls/bigwig/")
+        shell("rm random_controls/bigwig/zips1/._*")
+        shell("rmdir random_controls/bigwig/zips1/")
         
         shell("sleep 10")
         shell(f"wget http://khavarilab.stanford.edu/s/random_non_RBP_control_bigwigs_2tar.gz")
         shell("mv random_non_RBP_control_bigwigs_2tar.gz random_non_RBP_control_bigwigs_2.tar.gz")
         shell("tar -xf random_non_RBP_control_bigwigs_2.tar.gz -C random_controls/bigwig/")
-        shell("mv random_controls/bigwig/bigwig_group2/* random_controls/bigwig/")
-        shell("rmdir random_controls/bigwig/bigwig_group2/")
+        shell("mv random_controls/bigwig/zips2/* random_controls/bigwig/")
+        shell("rm random_controls/bigwig/zips2/._*")
+        shell("rmdir random_controls/bigwig/zips2/")
 
         shell("sleep 10")
         shell(f"wget http://khavarilab.stanford.edu/s/random_non_RBP_control_bigwigs_3tar.gz")
         shell("mv random_non_RBP_control_bigwigs_3tar.gz random_non_RBP_control_bigwigs_3.tar.gz")
         shell("tar -xf random_non_RBP_control_bigwigs_3.tar.gz -C random_controls/bigwig/")
-        shell("mv random_controls/bigwig/bigwig_group3/* random_controls/bigwig/")
-        shell("rmdir random_controls/bigwig/bigwig_group3/")        
+        shell("mv random_controls/bigwig/zips3/* random_controls/bigwig/")
+        shell("rm random_controls/bigwig/zips3/._*")
+        shell("rmdir random_controls/bigwig/zips3/")   
 #########################################################
 # Mapped read format conversions.
 #########################################################            
