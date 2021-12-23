@@ -113,7 +113,7 @@ def split_bam(
     
     l5_bc_pos = [pos for pos, base in enumerate(l5_inline_pattern) if base == 'B']
     l3_bc_pos = [pos for pos, base in enumerate(l3_inline_pattern) if base == 'B']
-        
+    
     for rec in recs:
         try:
             try:
@@ -127,6 +127,7 @@ def split_bam(
             l3 = ''.join([l3[i] for i in l3_bc_pos])
             barcode = f"{l5}__{l3}|{pcr_index}"
 
+            rec.query_name += "test"
             writer.write_record_to_barcode(rec=rec, barcode=barcode)
         except KeyError:
             pass
@@ -154,7 +155,7 @@ def split_bam(
         
         
 if __name__ == '__main__':
-    import pandas
+    import pandas, re
     df = pandas.read_csv('testdata/samples.txt', sep='\t')
     barcodes = ['__'.join([x,y]) for x,y in zip(df['L5_BC'], df['L3_BC'])]
 
@@ -163,4 +164,32 @@ if __name__ == '__main__':
         '_'.join(l5_l3): os.path.splitext(scheme.p6p3_to_long_filename_r1[l5_l3])[0] \
         for l5_l3 in zip(scheme.scheme_df['L5_BC'], scheme.scheme_df['L3_BC'])}
 
-    split_bam('testdata/sams/all_reads.bam', barcodes, barcode_to_fname, 'testdata/sams/split/')
+    df = pandas.read_csv('testdata/samples.txt', sep='\t')
+    df['Gene'] = [re.sub(' ', '-', x) for x in df['Gene']]  # Get rid of spaces.
+    df = df.loc[[type(x)==type('') for x in df['Gene']], :]
+
+    # Define the samples list used throughout the workflow.
+    samples = [f"{exp}_{protein}_{rep}_{l5_bc}_{l3_bc}" for exp,protein,l5_bc,l3_bc,rep in zip(
+        df['Experiment'], df['Gene'], df['L5_BC'], df['L3_BC'], df['Replicate'])]
+
+    # Read name suffix format example: 3773_AGCTAGAAAATCG_AGT
+    # AGCTAGAAAATCG_AGT -> AGCTAG=L5 BC. AGT=L3 BC. AAAATCG=UMI.
+
+    print('=' * 140)
+    print(df.head())
+
+    barcodes = []
+    barcode_to_fname = {}
+    for exp,protein,l5_bc,l3_bc,rep,r1_fastq in zip(
+        df['Experiment'], df['Gene'], df['L5_BC'], df['L3_BC'], df['Replicate'], df['R1_fastq']):
+
+        pcr_prefix = r1_fastq.split('R1.fastq')[0].split('R1.fq')[0].split('1.fq')[0].split('1.fastq')[0]
+        barcode = f"{l5_bc}__{l3_bc}|{pcr_prefix}"
+        fname = f"{exp}_{protein}_{rep}_{l5_bc}_{l3_bc}"
+        barcode_to_fname[barcode] = fname
+        barcodes.append(barcode)
+
+    print(barcodes)
+    print(barcode_to_fname)
+    split_bam('testdata/sams/all_reads.bam', barcodes, barcode_to_fname, 'testdata/sams/split/',
+             l5_inline_pattern="BBBBBBNNNNNNN", l3_inline_pattern="BBB")

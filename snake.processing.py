@@ -61,7 +61,9 @@ FASTQ_DIR = config['fastq'].rstrip('/')  # The directory to put fastq intermedia
 BIGWIG = config['bigwig'].rstrip('/')  # Holds bigwig outputs.
 RAW_FASTQ_R1_INPUTS = [config['Fastq_folder'].rstrip('/') + f"/{R1}" for R1 in df['R1_fastq']]
 RAW_FASTQ_R2_INPUTS = [config['Fastq_folder'].rstrip('/') + f"/{R2}" for R2 in df['R2_fastq']]
-PCR_INDEX_SET = list(set([os.path.basename(x).split("R1.fastq.gz")[0] for x in  RAW_FASTQ_R1_INPUTS]))
+PCR_INDEX_SET = list(set([
+    os.path.basename(x).split("R1.fastq")[0].split("R1.fq")[0].split("1.fastq")[0].split("1.fq")[0] \
+    for x in  RAW_FASTQ_R1_INPUTS]))
 # Path to the clipper excecutable.
 CLIPPER_PATH = "~/anaconda3/envs/clipper3/bin/clipper"
 if 'clipper' in config:

@@ -208,6 +208,42 @@ rule fix_umis_in_read_names:
         # E.g., BBBBBNNNNN
         l3_inline = config['L3_inline']
         l3 = "".join([x if x=='N' else "F" for x in l3_inline])
+        
+        ##################################################################
+        # Special case:
+        # If there are L5_PAT or L3_PAT columns in the samples file, then the in-line UMI patterns
+        # are expected to be different between samples. In this case, individual patterns given in
+        # that file override the config values, and when no values are given in the samples file,
+        # then the config values are taken as defaults.
+        # This special case only works when the all the in-line patterns still have the same
+        # length - otherwise umi_tools would have moved the wrong number of bases to the read names
+        # while processing the fastq files.
+        # The barcodes are expected to be in the same place.
+        
+        df = pandas.read_csv(config['samples'], sep='\t')
+        df['Gene'] = [re.sub(' ', '-', x) for x in df['Gene']]  # Get rid of spaces.
+        df = df.loc[[type(x)==type('') for x in df['Gene']], :]
+
+        # Define the samples list used throughout the workflow.
+        df.index = [f"{exp}_{protein}_{rep}_{l5_bc}_{l3_bc}" for exp,protein,l5_bc,l3_bc,rep in zip(
+            df['Experiment'], df['Gene'], df['L5_BC'], df['L3_BC'], df['Replicate'])]
+        
+        if 'L5_PAT' in df.columns:
+            pat = df.loc[sample, 'L5_PAT']
+            if type(pat) == type('') and len(pat) > 0:
+                l5 = "".join([x if x=='N' else "F" for x in pat])
+                print(f"read_preprocessing_and_mapping.smk, rule fix_umis_in_read_names:")
+                print(f"A specific L5 UMI pattern was given for {sample} in the samples file.")
+                print(f"It was interpreted as {l5} when adjusting read umis.")
+        if 'L3_PAT' in df.columns:
+            pat = df.loc[sample, 'L3_PAT']
+            if type(pat) == type('') and len(pat) > 0:
+                l3 = "".join([x if x=='N' else "F" for x in pat])   
+                print(f"read_preprocessing_and_mapping.smk, rule fix_umis_in_read_names:")
+                print(f"A specific L3 UMI pattern was given for {sample} in the samples file.")
+                print(f"It was interpreted as {l3} when adjusting read umis.")
+        ##################################################################
+        
         shell("python scripts/edit_UMI.py -i {input.bam} -o {output.bam} --l5 {l5} --l3 {l3}")
         
 rule dedup:
