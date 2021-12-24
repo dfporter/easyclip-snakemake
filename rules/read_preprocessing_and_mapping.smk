@@ -202,6 +202,7 @@ rule fix_umis_in_read_names:
         bam = SAMS_DIR + '/split_umis_fixed/{sample}.bam',
         bai = SAMS_DIR + '/split_umis_fixed/{sample}.bam.bai',
     run:
+        
         # E.g., BBBBBBNNNNNNN. B=barcode base, N=UMI base.
         l5_inline = config['L5_inline']
         l5 = "".join([x if x=='N' else "F" for x in l5_inline])
@@ -229,18 +230,18 @@ rule fix_umis_in_read_names:
             df['Experiment'], df['Gene'], df['L5_BC'], df['L3_BC'], df['Replicate'])]
         
         if 'L5_PAT' in df.columns:
-            pat = df.loc[sample, 'L5_PAT']
+            pat = df.loc[wildcards.sample, 'L5_PAT']
             if type(pat) == type('') and len(pat) > 0:
                 l5 = "".join([x if x=='N' else "F" for x in pat])
                 print(f"read_preprocessing_and_mapping.smk, rule fix_umis_in_read_names:")
-                print(f"A specific L5 UMI pattern was given for {sample} in the samples file.")
+                print(f"A specific L5 UMI pattern was given for {wildcards.sample} in the samples file.")
                 print(f"It was interpreted as {l5} when adjusting read umis.")
         if 'L3_PAT' in df.columns:
-            pat = df.loc[sample, 'L3_PAT']
+            pat = df.loc[wildcards.sample, 'L3_PAT']
             if type(pat) == type('') and len(pat) > 0:
                 l3 = "".join([x if x=='N' else "F" for x in pat])   
                 print(f"read_preprocessing_and_mapping.smk, rule fix_umis_in_read_names:")
-                print(f"A specific L3 UMI pattern was given for {sample} in the samples file.")
+                print(f"A specific L3 UMI pattern was given for {wildcards.sample} in the samples file.")
                 print(f"It was interpreted as {l3} when adjusting read umis.")
         ##################################################################
         
@@ -292,7 +293,7 @@ rule split_bam:
         for exp,protein,l5_bc,l3_bc,rep,r1_fastq in zip(
             df['Experiment'], df['Gene'], df['L5_BC'], df['L3_BC'], df['Replicate'], df['R1_fastq']):
 
-            pcr_prefix = r1_fastq.split('R1.fastq.gz')[0]
+            pcr_prefix = r1_fastq.split('R1.fastq')[0].split('R1.fq')[0].split('1.fq')[0].split('1.fastq')[0]
             barcode = f"{l5_bc}__{l3_bc}|{pcr_prefix}"
             fname = f"{exp}_{protein}_{rep}_{l5_bc}_{l3_bc}"
             barcode_to_fname[barcode] = fname

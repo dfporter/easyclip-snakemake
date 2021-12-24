@@ -127,7 +127,6 @@ def split_bam(
             l3 = ''.join([l3[i] for i in l3_bc_pos])
             barcode = f"{l5}__{l3}|{pcr_index}"
 
-            rec.query_name += "test"
             writer.write_record_to_barcode(rec=rec, barcode=barcode)
         except KeyError:
             pass
