@@ -32,10 +32,22 @@ class BamWriter:
         self.prefix = prefix
         self.barcodes = set(barcodes)
         self.barcode_to_fname = barcode_to_fname
-        self.outfiles = {
-            barcode: self.open_bam(f"{self.prefix}{barcode_to_fname[barcode]}.bam") \
-            for barcode in barcodes}
-        self.outfile_names = [f"{self.prefix}{barcode_to_fname[barcode]}.bam" for barcode in barcodes]
+        self.outfiles = {}
+        files_opened = {}  # Avoid errors when multiple raw input fastqs have the same output.
+        
+        for barcode in barcodes:
+            out_bam_name = f"{self.prefix}{barcode_to_fname[barcode]}.bam"
+            if barcode not in self.outfiles:
+                if out_bam_name not in files_opened:
+                    self.outfiles[barcode] = self.open_bam(out_bam_name)
+                    files_opened[out_bam_name] = barcode
+                else:
+                    self.outfiles[barcode] = self.outfiles[files_opened[out_bam_name]]
+        
+        #print(f"bamWriter.__init__(): outfiles = {self.outfiles}")
+        
+        self.outfile_names = list(set([
+            f"{self.prefix}{barcode_to_fname[barcode]}.bam" for barcode in barcodes]))
 
         # Make copies of the barcode with all possible 1 nt SNP that all
         # output to the same file. If two barcodes differ by only 1 nt then this fails,
@@ -133,25 +145,31 @@ def split_bam(
 
     for fh in writer.outfiles.values():
         fh.close()
-
+    
     for bamfilename in writer.outfile_names:
         
         if not os.path.exists(bamfilename):
             continue
-            
+           
         base = os.path.splitext(bamfilename)[0]
-        cmd = f"samtools sort -o {base}.sorted.bam {bamfilename}"
-        print(cmd)
-        res = subprocess.check_output(cmd.split(' '))
+        try:
+            
+            cmd = f"samtools sort -o {base}.sorted.bam {bamfilename}"
+            print(cmd)
+            res = subprocess.check_output(cmd.split(' '))
 
-        cmd = f"mv {base}.sorted.bam {bamfilename}"
-        print(cmd)
-        res = subprocess.check_output(cmd.split(' '))
-        
-        cmd = f"samtools index {bamfilename}"
-        print(cmd)
-        res = subprocess.check_output(cmd.split(' '))
-        
+            cmd = f"mv {base}.sorted.bam {bamfilename}"
+            print(cmd)
+            res = subprocess.check_output(cmd.split(' '))
+
+            cmd = f"samtools index {bamfilename}"
+            print(cmd)
+            res = subprocess.check_output(cmd.split(' '))
+        except:
+            print(f"Error processing {bamfilename}. Tried commands: ")
+            print(f"samtools sort -o {base}.sorted.bam {bamfilename}")
+            print(f"mv {base}.sorted.bam {bamfilename}")
+            print(f"samtools index {bamfilename}")
         
 if __name__ == '__main__':
     import pandas, re
