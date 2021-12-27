@@ -4,21 +4,30 @@ import os, glob
 
 def for_split_bedgraph_lines(fname: str) -> List:
     with open(fname) as f:
-        next(f)  # Skip header.
+        try:
+            next(f)  # Skip header.
+        except:
+            yield ('', 0, 1, 0)
         for li in f:
             sp = li.rstrip('\n').split('\t')
+            # (_, start, end, value)
             yield (sp[0], int(sp[1]) , int(sp[2]), sp[3])
 
 
 def get_auc(fname: str) -> float:
     auc = 0
     for s in for_split_bedgraph_lines(fname):
-        auc += (s[2] - s[1]) * float(s[3])
-    
+        # (end - start) * value
+        try:
+            auc += (s[2] - s[1]) * float(s[3])
+        except:
+            auc += 0
+            print(f"scripts.total_read_numbers.get_auc({fname}):\nError processing values {s}.")
+            print(f"Entered zero signal for the line. Current total auc for this file is {auc}.")
     return auc
 
 
-def total_read_numbers(folder: str, outfile='./data/') -> Mapping[str, float]:
+def total_read_numbers(folder: str, outfile='./data/total_read_numbers.txt') -> Mapping[str, float]:
     """Total area under the curve for bedgraphs in a folder.
     Assuming each read is a single point with value 1, this is the total read number.
     Write the results to a file.

@@ -71,17 +71,19 @@ CLIPPER_PATH = "~/anaconda3/envs/clipper3/bin/clipper"
 if 'clipper' in config:
     CLIPPER_PATH = config['clipper']
     
-
+    
 def protein_in_fname(fname):
     if '/' in fname:
         base = fname.split('/')[-1]
         return '_'.join(base.split('_')[1:-3])
     return '_'.join(fname.split('_')[1:-3])
 
+
 def control_bigwigs():
     _df = pandas.read_csv("random_controls/samples.txt", sep='\t')
     return [f"random_controls/bigwig/{exp}_{gene}_{rep}_{l5}_{l3}.bigwig" for \
             exp,gene,rep,l5,l3 in zip(_df.Experiment, _df.Gene, _df.Replicate, _df.L5_BC, _df.L3_BC)]
+
 
 def control_bigwigs_3prime():
     _df = pandas.read_csv("random_controls/samples.txt", sep='\t')
@@ -90,6 +92,7 @@ def control_bigwigs_3prime():
     minus = [f"random_controls/bigwig/3prime/{exp}_{gene}_{rep}_{l5}_{l3}.-.bigwig" for \
             exp,gene,rep,l5,l3 in zip(_df.Experiment, _df.Gene, _df.Replicate, _df.L5_BC, _df.L3_BC)]
     return plus + minus
+
 
 #########################################################
 # Begin rules.
@@ -519,6 +522,9 @@ rule reads_per_gene_from_htseq_combine_samples:
             finaldf = pandas.concat(dfs, axis=1, join='inner').sort_index()
 
             return finaldf
+        
+        input.exon = list(set(input.exon))
+        input.intron = list(set(input.intron))
         
         exons = merge_counts_files(input.exon, left_strip='htseq_count_raw.exon.', right_strip='.txt')
         introns = merge_counts_files(input.intron, left_strip='htseq_count_raw.intron.', right_strip='.txt')
