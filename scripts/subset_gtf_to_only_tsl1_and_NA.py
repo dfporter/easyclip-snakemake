@@ -7,7 +7,8 @@ def subset_to_only_tsl1_and_NA(input_file, output_file):
     with open(input_file) as f:
         for li in f:
             
-            if (('transcript_support_level "1"' in li) or ('transcript_support_level "NA"' in li)):
+            if (('transcript_support_level "1"' in li) or ('transcript_support_level "NA"' in li)) or (
+                'tag "Ensembl_canonical"' in li):
                 
                 outf.write(li)
 
