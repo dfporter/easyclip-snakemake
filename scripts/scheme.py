@@ -93,7 +93,6 @@ class scheme():
             self.scheme_df = pandas.read_excel(scheme_fname, engine='openpyxl')
         else:
             self.scheme_df = pandas.read_csv(scheme_fname, sep='\t')
-        print(self.scheme_df.head())
         
         if 'P6_BC' in self.scheme_df.columns and 'L5_BC' not in self.scheme_df.columns:
             self.scheme_df['L5_BC'] = self.scheme_df['P6_BC']

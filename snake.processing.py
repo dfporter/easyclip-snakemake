@@ -59,6 +59,7 @@ TOP_DIR = config['top_dir'].rstrip('/')
 SAMS_DIR = config['sams'].rstrip('/')  # Holds both bam and sam, as well as STAR output logs.
 FASTQ_DIR = config['fastq'].rstrip('/')  # The directory to put fastq intermediates in.
 BIGWIG = config['bigwig'].rstrip('/')  # Holds bigwig outputs.
+BEDGRAPH = ex.file_paths['bedgraph'].rstrip('/') 
 RAW_FASTQ_R1_INPUTS = [config['Fastq_folder'].rstrip('/') + f"/{R1}" for R1 in df['R1_fastq']]
 RAW_FASTQ_R2_INPUTS = [config['Fastq_folder'].rstrip('/') + f"/{R2}" for R2 in df['R2_fastq']]
 PCR_INDEX_SET = list(set([
@@ -91,6 +92,8 @@ rule all:
         expand(BIGWIG + "/3prime/{sample}.+.bigwig", sample=samples),
         expand(BIGWIG + "/3prime/{sample}.-.bigwig", sample=samples),
         expand(SAMS_DIR + '/genome_only/{sample}.bam', sample=samples),
+        expand(BEDGRAPH + "/full_read_stranded/{sample}.+.wig", sample=samples), 
+        expand(BEDGRAPH + "/full_read_stranded/{sample}.-.wig", sample=samples), 
     run:
         shell("echo Completed!")
 
@@ -138,6 +141,18 @@ rule convert_to_bedgraph:
     run:
         shell("bedtools genomecov -split -bg -ibam {input} > {output.bdg}")
         shell("bedSort {output.bdg} {output.bdg}")
+        
+rule convert_to_stranded_bedgraph:
+    input:
+        SAMS_DIR + "/dedup/{sample}.bam"
+    output:
+        plus = ex.file_paths['bedgraph'].rstrip('/') + "/full_read_stranded/{sample}.+.wig",  # Bedgraph. wig extension so IGV loads.
+        minus = ex.file_paths['bedgraph'].rstrip('/') + "/full_read_stranded/{sample}.-.wig",  # Bedgraph. wig extension so IGV loads.                
+    run:
+        shell("bedtools genomecov -split -bg -strand + -ibam {input} > {output.plus}")
+        shell("bedSort {output.plus} {output.plus}")
+        shell("bedtools genomecov -split -bg -strand - -ibam {input} > {output.minus}")
+        shell("bedSort {output.minus} {output.minus}")            
         
 rule convert_full_read_bedgraph_to_BigWig:
     input:

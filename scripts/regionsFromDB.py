@@ -55,7 +55,7 @@ reflect the more general case of normalizing coverage across genomic elements.
 """
 
 def an_iv_list(feat, strand=False):
-    """Given A feature object from gffutils return an interval list."""
+    """Given a feature object from gffutils return an interval list."""
     if not strand:
         return [feat.chrom, feat.start, feat.end]
     return [feat.chrom, feat.start, feat.end, feat.strand]
