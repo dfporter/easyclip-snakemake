@@ -157,6 +157,7 @@ def stacked_bargraph(
     hue_values_observed = set()
     for sample in usable_proteins_ordered:
         
+        
         sub = df[df[sample_label]==sample].copy()
         to_val = dict(zip(sub[hue_label].tolist(), sub[value_label].tolist()))
 
@@ -188,7 +189,6 @@ def stacked_bargraph(
         #print(f'df_of_y[-1]={df_of_y[-1]}')
 
     _df = pandas.concat(df_of_y)
-    print(f'concat: {_df}')
     """
     # Put the list of lists of dicts [[{}, {}..], [{},...]] together into one table.
     if len(df_of_y) > 1:
