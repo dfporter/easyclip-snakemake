@@ -1,9 +1,35 @@
 import os, sys, re, glob, pandas, importlib, shutil, math, pysam, pickle, collections, HTSeq, random
 import numpy as np
 
+def peak_loader(fname):
+    with open(fname) as f:
+        for li in f:
+            if 'chrom' in li and ('start' in li) and ('end' in li):
+                header = 0
+            else:
+                header = None
+            break
+    try:
+        df = pandas.read_csv(fname, sep='\t', index_col=False, header=header)
+        empty = False
+    except:
+        df = pandas.DataFrame([{
+            'chrom': '1', 'start': 10, 'end': 110, 'strand': '+', 'name': 'no_peaks', 'q': 0}])
+        df['fasta_seq_title'] = [f"{chrom}_{start}_{end}" for chrom, start, end in zip(df.chrom, df.start, df.end)]
+        empty = True
+    if (not empty) and (header is None):
+            df = df.rename(
+                columns={0: 'chrom', 1: 'start', 2: 'end', 3: 'name', 4: 'score',
+                        5: 'strand', 6: 'signalValue', 6: 'p', 7: 'q', 8: 'point_source'})
+            df['fasta_seq_title'] = [f"{chrom}_{start}_{end}" for chrom, start, end in zip(df.chrom, df.start, df.end)]
+
+    return df
+
 def load_narrowPeaks(fname):
 
-    column_names = ['chrom', 'start', 'end', 'name', 'score', 'strand', 'enrich', 'p', 'q', 'point_source']
+    column_names = [
+        'chrom', 'start', 'end', 'name', 'score', 'strand', 'enrich', 'p', 'q', 'point_source',
+        'fasta_seq_title', 'IGV_location', 'Gene']
     
     try:
         df = pandas.read_csv(fname, sep='\t')
@@ -11,9 +37,10 @@ def load_narrowPeaks(fname):
         df = pandas.DataFrame([{
             'chrom': '1', 'start': 10, 'end': 110, 'name': 'no_peaks', 'score': 0, 'strand': '+', 
             'enrich': 0, 'p': 0, 'q': 0, 'point_source': 70}])
-        print(f"Couldn't load {fname}. Making an dummy dataframe instead.")
+        print(f"Couldn't load {fname}. Making a dummy dataframe instead.")
 
     # Raw MACS2 output has no header.
+    print(df)
     df.columns = column_names[:len(df.columns)]
     
     # To match with the sequence in the fasta file of sequences under peaks.
@@ -26,9 +53,11 @@ def load_narrowPeaks(fname):
 
 def peaks_as_bdg(fname, bdg_fname):
     base = os.path.basename(fname).split(".narrowPeak")[0]
-    df = load_narrowPeaks(fname)
+    df = peak_loader(fname)
     ga = HTSeq.GenomicArray('auto', stranded=False)
     for chrom, start, end, q in zip(df.chrom, df.start, df.end, df.q):
+        if type(chrom) != type(''):
+            chrom = str(chrom)
         ga[HTSeq.GenomicInterval(chrom, start, end)] += q
     ga.write_bedgraph_file(bdg_fname)
         

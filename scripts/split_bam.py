@@ -133,7 +133,7 @@ def split_bam(
             except:
                 print(rec.query_name)
                 sys.exit()
-            pcr_index = rec.query_name.split('__')[-1].split('|')[-1]
+            pcr_index = rec.query_name.split('__')[-1].split('|')[-1].strip('"')
             
             l5 = ''.join([l5[i] for i in l5_bc_pos])
             l3 = ''.join([l3[i] for i in l3_bc_pos])

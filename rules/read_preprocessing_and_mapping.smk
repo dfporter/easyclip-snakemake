@@ -403,7 +403,7 @@ rule move_umis:
             cmd += " -j " + str(threads)
 
 
-            cmd += r" --rename={id}__{r1.cut_prefix}-{r2.cut_prefix}|" + pcr_index + \
+            cmd += r' --rename="{id}__{r1.cut_prefix}-{r2.cut_prefix}|"' + pcr_index + \
             f' --too-short-output {fq}/umis_moved/too_short/{basename1}.gz'
         
             cmd += f' --too-short-paired-output {fq}/umis_moved/too_short/{basename2}.gz'

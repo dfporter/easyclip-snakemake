@@ -8,6 +8,7 @@ import scripts.rnaDataFileMaker
 import scripts.make_repeats_chrom
 import scripts.split_bam
 import scripts.random_sequence
+import scripts.narrow_peak_borders
 
 from scripts.macs2_snake_utils import load_narrowPeaks, peaks_as_bdg, load_fasta, write_random_seqs 
 from scripts.macs2_snake_utils import find_chrom, add_seq, add_seq_transcriptome
@@ -36,10 +37,12 @@ df['Gene'] = [re.sub(' ', '-', x) for x in df['Gene']]  # Get rid of spaces.
 samples = [f"{exp}_{protein}_{rep}_{l5_bc}_{l3_bc}" for exp,protein,l5_bc,l3_bc,rep in zip(
     df['Experiment'], df['Gene'], df['L5_BC'], df['L3_BC'], df['Replicate'])]
 
-PROTEINS = list(set(df['Gene'])) 
-
-# Three levels of peak cutoffs.
-peak_cutoffs = [1, 2, 3]
+PROTEINS = list(set(df['Gene']))
+  
+MIN_PEAK_NUM = 5000
+MAX_PEAK_NUM = 10000
+MIN_LOG_FDR = 2
+DB_FNAME = "data/processed/features.db"
 
 # Constrain sample wildcards to not contain '/'.
 wildcard_constraints:
@@ -47,6 +50,7 @@ wildcard_constraints:
     protein= "[^\/\.]+",
     peak_cutoff="[123]+",
     strand="[\+-]",
+    filtering="\w+",
 
 # Read the sample sheet into the exp object.
 ex.read_scheme(config['samples'])
@@ -58,6 +62,7 @@ FASTQ_DIR = config['fastq'].rstrip('/')  # The directory to put fastq intermedia
 BIGWIG = config['bigwig'].rstrip('/')  # Holds bigwig outputs.
 MACS_PEAKS = config['top_dir'].rstrip('/') + '/outs/peaks/macs2'
 BEDGRAPH = ex.file_paths['bedgraph'].rstrip('/') + '/merged'
+
 
 #########################################################
 # Custom merge settings.
@@ -99,48 +104,64 @@ def control_bigwigs_3prime():
 #########################################################
 # Begin rules.
 #########################################################
+#211220_ddx50/outs/peaks/macs2/bedgraph/DDX50_H_gluc_KC.wig
+#211220_ddx50/outs/peaks/macs2/filtered/nonexonic_stranded_no_ncrna/DDX50_H_gluc_KC_peaks.narrowPeak
+#211220_ddx50/outs/peaks/macs2/genomic_crude_filter/DDX50_H_gluc_KC_peaks.narrowPeak
+include:
+    'rules/motif_finder_calls.smk'
+include:
+    'rules/macs2_peak_filtering.smk'
 
 rule all:
     input:
         "assets/reference/gencode.v39.transcripts.basic.fa",
-        expand(MACS_PEAKS + "/{protein}_peaks.narrowPeak", protein=PROTEINS),
-        expand(MACS_PEAKS + "/filtered/{protein}_peaks.narrowPeak", protein=PROTEINS),
-        expand(MACS_PEAKS + "/bedgraph/{protein}.wig", protein=PROTEINS),
-        expand(MACS_PEAKS + "/filtered/with_strand/no_ncrna/{protein}_peaks.narrowPeak", protein=PROTEINS),
-        expand(MACS_PEAKS + "/fastas/genomic_no_ncrna/{protein}.fa", protein=PROTEINS),
-        expand(MACS_PEAKS + "/fastas/randomControls/{protein}.fa", protein=PROTEINS),
         
-        expand(MACS_PEAKS + "/homer/combined_short/{protein}/", protein=PROTEINS),
-        expand(MACS_PEAKS + "/dreme/combined_short/{protein}/", protein=PROTEINS),
-        expand(MACS_PEAKS + "/homer/nonexonic/{protein}/", protein=PROTEINS),
-        expand(MACS_PEAKS + "/dreme/nonexonic/{protein}/", protein=PROTEINS),
+        expand(MACS_PEAKS + "/genomic_crude_filter_strand_not_added/{protein}_peaks.narrowPeak", protein=PROTEINS),
+        expand(MACS_PEAKS + "/genomic/{protein}_peaks.narrowPeak", protein=PROTEINS),        
+        expand(MACS_PEAKS + "/genomic_no_ncrna/{protein}_peaks.narrowPeak", protein=PROTEINS),
+        expand(MACS_PEAKS + "/genomic_nonexonic_no_ncrna/{protein}_peaks.narrowPeak", protein=PROTEINS),
+        
+        expand(MACS_PEAKS + "/genomic_no_ncrna/fastas/{protein}.fa", protein=PROTEINS),
+        expand(MACS_PEAKS + "/genomic_nonexonic_no_ncrna/fastas/{protein}.fa", protein=PROTEINS),        
+        #expand(MACS_PEAKS + "/bedgraph/{protein}.wig", protein=PROTEINS),
+
+        expand(MACS_PEAKS + "/randomControls/fastas/{protein}.fa", protein=PROTEINS),
+        
+        expand(MACS_PEAKS + "/homer/genomic_nonexonic_no_ncrna/{protein}/", protein=PROTEINS),
+        #expand(MACS_PEAKS + "/dreme/genomic_nonexonic_no_ncrna/{protein}/", protein=PROTEINS),
         expand(MACS_PEAKS + "/homer/genomic_no_ncrna/{protein}/", protein=PROTEINS),
-        expand(MACS_PEAKS + "/dreme/genomic_no_ncrna/{protein}/", protein=PROTEINS),
+        #expand(MACS_PEAKS + "/dreme/genomic_no_ncrna/{protein}/", protein=PROTEINS),
         
         #expand(BEDGRAPH + "/transcriptome/{protein}.wig", protein=PROTEINS),
-        expand(SAMS_DIR + "/merged/no_repeats/{protein}.bam", protein=PROTEINS),
-        expand(FASTQ_DIR + "/remapping_to_transcriptome/{protein}.fastq", protein=PROTEINS),
-        expand(TOP_DIR + "/outs/salmon_quant/{protein}_quant", protein=PROTEINS),
-        expand(SAMS_DIR + "/merged/transcriptome/{protein}.Aligned.out.sam", protein=PROTEINS),
-        expand(MACS_PEAKS + "/transcriptome/filtered/{protein}_peaks.narrowPeak", protein=PROTEINS),
-        expand(MACS_PEAKS + "/fastas/transcriptome/{protein}.fa", protein=PROTEINS),
-        expand(MACS_PEAKS + "/filtered/nonexonic_stranded_no_ncrna/{protein}_peaks.narrowPeak", protein=PROTEINS),
-        expand(MACS_PEAKS + "/fastas/combined/{protein}.fa", protein=PROTEINS),
+        #expand(SAMS_DIR + "/merged/no_repeats/{protein}.bam", protein=PROTEINS),
+        #expand(FASTQ_DIR + "/remapping_to_transcriptome/{protein}.fastq", protein=PROTEINS),
+        #expand(TOP_DIR + "/outs/salmon_quant/{protein}_quant", protein=PROTEINS),
+        #expand(SAMS_DIR + "/merged/transcriptome/{protein}.Aligned.out.sam", protein=PROTEINS),
         
-        expand(MACS_PEAKS + "/filtered/nonexonic_stranded_no_ncrna/{protein}_peaks.narrowPeak", protein=PROTEINS),
+        #expand(MACS_PEAKS + "/transcriptome/filtered/{protein}_peaks.narrowPeak", protein=PROTEINS),
+        #expand(MACS_PEAKS + "/fastas/transcriptome/{protein}.fa", protein=PROTEINS),
+        #expand(MACS_PEAKS + "/filtered/nonexonic_stranded_no_ncrna/{protein}_peaks.narrowPeak", protein=PROTEINS),
+        expand(MACS_PEAKS + "/combined/fastas/{protein}.fa", protein=PROTEINS),
+        expand(MACS_PEAKS + "/homer/combined/{protein}/", protein=PROTEINS),
+        expand(MACS_PEAKS + "/bedgraph/{filtering}/{protein}.wig", protein=PROTEINS,
+            filtering=[
+                #'transcriptome', 'combined', 'genomic', 
+                'genomic_crude_filter_strand_not_added',
+                'genomic_no_ncrna', 'genomic_nonexonic_no_ncrna'
+            ]),
+        
+        #expand(MACS_PEAKS + "/filtered/nonexonic_stranded_no_ncrna/{protein}_peaks.narrowPeak", protein=PROTEINS),
         
         #expand(BEDGRAPH + "/transcriptome/{protein}.wig", protein=PROTEINS),
         
         # Peak bedgraphs.
-        expand(BEDGRAPH + "/peaks/filtered/no_ncrna/{protein}.wig", protein=PROTEINS),
-        expand(BEDGRAPH + "/peaks/filtered/nonexonic_stranded_no_ncrna/{protein}.wig", protein=PROTEINS),
+        #expand(BEDGRAPH + "/peaks/filtered/no_ncrna/{protein}.wig", protein=PROTEINS),
+        #expand(BEDGRAPH + "/peaks/filtered/nonexonic_stranded_no_ncrna/{protein}.wig", protein=PROTEINS),
         #expand(BEDGRAPH + "/peaks/unfiltered_genome/{protein}.wig", protein=PROTEINS),
         #expand(BEDGRAPH + "/transcriptome_peaks/unfiltered/{protein}.wig", protein=PROTEINS),
-        expand(BEDGRAPH + "/transcriptome_peaks/filtered/{protein}.wig", protein=PROTEINS),
+        #expand(BEDGRAPH + "/transcriptome_peaks/filtered/{protein}.wig", protein=PROTEINS),
     run:
         shell("echo Completed!")
-
-#include: 'rules/macs2.smk'
 
 
 """
@@ -316,7 +337,7 @@ rule macs2_peak_calling_transcriptome:
     input:
         bam = SAMS_DIR + "/merged/transcriptome/{protein}.bam",
     output:
-        peaks = MACS_PEAKS + "/transcriptome/{protein}_peaks.narrowPeak",
+        peaks = MACS_PEAKS + "/raw_macs2_output_transcriptome/{protein}_peaks.narrowPeak",
         #peaks_dir = "outs/macs2_peaks"
     conda:
         "envs/macs2.yml"
@@ -326,37 +347,7 @@ rule macs2_peak_calling_transcriptome:
         # Number of CHROMOSOME * BUFFER_SIZE * 2 Bytes.: 
         #shell(f"macs2 callpeak -t {input}  -f BAM -n {sample} --outdir outs/macs2_peaks/ --nomodel -q 0.1 --bw 100;")
         "macs2 callpeak -t {input.bam} -f BAM -n {wildcards.protein} "#-c assets/inputs/Input_RBFOX2_HepG2_hg38.bam"
-              " --outdir {MACS_PEAKS}/transcriptome/ --nomodel -q 0.01 --bw 100 --buffer-size 100;"    
-            
-rule filter_peaks_transcriptome:
-    input:
-        peaks = MACS_PEAKS + "/transcriptome/{protein}_peaks.narrowPeak",
-    output:
-        subset_peaks = MACS_PEAKS + "/transcriptome/filtered/{protein}_peaks.narrowPeak",
-    run:
-        msgs = [f"{wildcards.protein}: {input.peaks}"]
-        df = load_narrowPeaks(input.peaks)
-        
-        # For DDX21_high_glucose:
-        # FDR 10^-12 ->      GCNGCNGC (second best)
-        # FDR 10^-15 -> best=GCNGCNGC
-        # FDR 10^-20 -> best=GCGGCGGC
-        
-        low_q = len(df[df['q']>=15].index)
-        if low_q > 1000:
-            df = df[df['q']>=15]
-        else:
-            df = df.sort_values(by='q', ascending=False).head(  min([1000, len(df.index)])  )
-            
-            if len(df.index) == 0:
-                msg = f"{wildcards.protein}: No significant peaks at all."
-            else:
-                msg = f"{wildcards.protein}: Only {low_q} peaks with FDR<10^-15, using the best FDR" + \
-                      f" {len(df.index)} peaks instead. Lowest q={min(df['q'])}."
-            print(msg); msgs.append(msg)
-        
-        print(df)
-        df.to_csv(output.subset_peaks, sep='\t', index=False)
+              " --outdir {MACS_PEAKS}/raw_macs2_output_transcriptome/ --nomodel -q 0.01 --bw 100 --buffer-size 100;"    
             
 
 
@@ -368,216 +359,23 @@ rule macs2_peak_calling:
     input:
         bam = SAMS_DIR + "/merged/{protein}.bam"
     output:
-        peaks = MACS_PEAKS + "/{protein}_peaks.narrowPeak",
+        peaks = MACS_PEAKS + "/raw_macs2_output_genome/{protein}_peaks.narrowPeak",
         #peaks_dir = "outs/macs2_peaks"
     conda:
         "envs/macs2.yml"
     shell:
         #shell(f"macs2 callpeak -t {input}  -f BAM -n {sample} --outdir outs/macs2_peaks/ --nomodel -q 0.1 --bw 100;")
         "macs2 callpeak -t {input.bam} -f BAM -n {wildcards.protein} "#-c assets/inputs/Input_RBFOX2_HepG2_hg38.bam"
-              " --outdir {MACS_PEAKS} --nomodel -q 0.01 --bw 100;"
+              " --outdir {MACS_PEAKS}/raw_macs2_output_genome/ --nomodel -q 0.01 --bw 100;"
 
 rule peak_bedgraphs:
     input:
-        peaks = MACS_PEAKS + "/{protein}_peaks.narrowPeak",
+        peaks = MACS_PEAKS + "/{filtering}/{protein}_peaks.narrowPeak", 
     output:
-        bdg = MACS_PEAKS + "/bedgraph/{protein}.wig",
+        bdg = MACS_PEAKS + "/bedgraph/{filtering}/{protein}.wig",
     run:
-        peaks_as_bdg(input.peaks, output.bdg)
+        peaks_as_bdg(str(input.peaks), str(output.bdg))
 
-rule filter_peaks:
-    input:
-        peaks = MACS_PEAKS + "/{protein}_peaks.narrowPeak",
-    output:
-        subset_peaks = MACS_PEAKS + "/filtered/{protein}_peaks.narrowPeak",
-    run:
-        msgs = [f"{wildcards.protein}: {input.peaks}"]
-        df = load_narrowPeaks(input.peaks)
-        df = df.loc[[len(x)<6 for x in df.chrom], :]  # Lazy removal of weird chromosomes.
-        
-        # For DDX21_high_glucose:
-        # FDR 10^-12 ->      GCNGCNGC (second best)
-        # FDR 10^-15 -> best=GCNGCNGC
-        # FDR 10^-20 -> best=GCGGCGGC
-        
-        low_q = len(df[df['q']>=15].index)
-        if low_q > 1000:
-            df = df[df['q']>=15]
-        elif df.shape[0] > 0:
-            df = df.sort_values(by='q', ascending=False).head(  min([1000, len(df.index)])  )
-            
-            msg = f"{wildcards.protein}: Only {low_q} peaks with FDR<10^-15, using the best FDR" + \
-                  f" {len(df.index)} peaks instead. Lowest q={min(df['q'])}."
-            print(msg); msgs.append(msg)
-        else:
-            print(f"{wildcards.protein}: No peaks.")
-            
-        print(df)
-        df.to_csv(output.subset_peaks, sep='\t', index=False)
-
-#########################################################
-# Genomic filtered peaks to stranded peaks.
-#########################################################
-rule determine_strand:
-    input:
-        peaks = MACS_PEAKS + "/filtered/{protein}_peaks.narrowPeak",
-        bam = SAMS_DIR + "/merged/{protein}.bam",
-    output:
-        peaks = MACS_PEAKS + "/filtered/with_strand/{protein}_peaks.narrowPeak",
-    run:
-        import pysam
-        df = pandas.read_csv(input.peaks, sep='\t', index_col=False)
-        can_determine, too_few_reads, too_even = 0, 0, 0
-        calls = []
-        bam = pysam.AlignmentFile(input.bam, 'rb')
-        
-        for chrom, start, end in zip(df.chrom, df.start, df.end):
-            forward, reverse = 0, 0
-            for n, r in enumerate(
-                bam.fetch(contig=chrom, start=start, stop=end)):
-                if r.is_reverse:
-                    reverse += 1
-                else:
-                    forward += 1
-                if n>1000:
-                    break
-            total = forward + reverse
-            if total < 5:
-                too_few_reads += 1
-                calls.append('.')
-            else:
-                if forward >= 5 * reverse:
-                    can_determine += 1
-                    calls.append('+')
-                elif reverse >= 5 * forward:
-                    can_determine += 1
-                    calls.append('-')
-                else:
-                    too_even += 1
-                    calls.append('.')
-        df['strand'] = calls
-        print(f"Could determine strand: {can_determine}, <5 reads: {too_few_reads}, too even: {too_even}")
-        df.to_csv(output.peaks, sep='\t', index=False)
-
-################################################################
-# Remove exonic peaks from the chromosomal coordinate peak file.
-################################################################
-
-def calc_degree_of_overlap(start, end, exons):
-    """Replace with pybedtools or some faster method."""
-    peak_len = end - start
-    overlap = np.zeros(peak_len)
-    for exon in exons:
-        for n, pos in enumerate(range(start, end)):
-            if exon.start <= pos <= exon.end:
-                overlap[n] = 1
-    frac_overlap = np.mean(overlap)
-    return frac_overlap
-
-def frac_overlap_exon(seqid, start, end, strand, db):
-    """Cutoff for overlap is 70% of peak."""
-    a = list(db.features_of_type(['exon'], limit=('chr' + seqid, start, end), strand=strand))
-    if len(a):
-        frac_overlap = calc_degree_of_overlap(start, end, a)
-        if frac_overlap >= 0.40:
-            return True
-        return False
-    a = list(db.features_of_type(['exon'], limit=(seqid, start, end), strand=strand))
-    if len(a):
-        frac_overlap = calc_degree_of_overlap(start, end, a)
-        if frac_overlap >= 0.40:
-            return True
-        return False
-    return False    
-
-rule remove_exonic_peaks:
-    input:
-        peaks = MACS_PEAKS + "/filtered/with_strand/{protein}_peaks.narrowPeak",
-    output:
-        peaks = MACS_PEAKS + "/filtered/nonexonic_stranded/{protein}_peaks.narrowPeak",
-    run:
-        print(f"Removing exonic peaks from {input.peaks} and saving to {output.peaks}.")
-        # Note that this db object needs to be changed to correspond with the transcriptome.
-        # It should be generated from the gencode v39 gtf and saved under TOP_DIR.
-        db_fname = "data/processed/features.db"
-        db = gffutils.FeatureDB(db_fname, keep_order=True)
-        df = pandas.read_csv(str(input.peaks), sep='\t', index_col=False)
-        print(len(df.index))
-        df['exonic'] = [frac_overlap_exon(*tup, db) for tup in zip(df.chrom, df.start, df.end, df.strand)]
-        print(df)
-        print(df[df['exonic']])
-        non_exonic = df[~df['exonic']] 
-        non_exonic.to_csv(str(output.peaks), sep='\t', index=False)
-
-def overlap_ncrna(seqid, start, end, strand, db):
-    exons = list(db.features_of_type(['exon'], limit=('chr' + seqid, start, end), strand=strand))
-    if len(exons):
-        for exon in exons:
-            if exon.attributes['gene_type'] != 'protein_coding':
-                return True
-    return False
-
-def assign_to_gene(seqid, start, end, strand, db):
-    # Not used in this workflow currently.
-    exons = list(db.features_of_type(['exon'], limit=('chr' + seqid, start, end), strand=strand))
-    names = set()
-    if len(exons):
-        for exon in exons:
-            names.add(exon.attributes['gene_name'])
-    return names
-
-def peak_loader(fname):
-    with open(fname) as f:
-        for li in f:
-            if 'chrom' in li and ('start' in li) and ('end' in li):
-                header = 0
-            else:
-                header = None
-            break
-    try:
-        df = pandas.read_csv(fname, sep='\t', index_col=False, header=header)
-        empty = False
-    except:
-        df = pandas.DataFrame([{
-            'chrom': '1', 'start': 10, 'end': 110, 'strand': '+', 'name': 'no_peaks', 'q': 0}])
-        df['fasta_seq_title'] = [f"{chrom}_{start}_{end}" for chrom, start, end in zip(df.chrom, df.start, df.end)]
-        empty = True
-    if (not empty) and (header is None):
-            df = df.rename(
-                columns={0: 'chrom', 1: 'start', 2: 'end', 3: 'name', 4: 'score',
-                        5: 'strand', 6: 'signalValue', 6: 'p', 7: 'q', 8: 'point_source'})
-    return df
-    
-rule remove_overlap_ncrna_from_non_exonic:
-    # In progress.
-    input:
-        peaks = MACS_PEAKS + "/filtered/nonexonic_stranded/{protein}_peaks.narrowPeak",
-        gtf = "assets/reference/gencode.v39.basic.annotation.gtf",
-    output:
-        peaks = MACS_PEAKS + "/filtered/nonexonic_stranded_no_ncrna/{protein}_peaks.narrowPeak",
-    run:
-        db_fname = "data/processed/features.db"
-        db = gffutils.FeatureDB(db_fname, keep_order=True)
-        df = peak_loader(str(input.peaks))
-        df['overlaps_ncrna'] = [overlap_ncrna(*tup, db) for tup in zip(df.chrom, df.start, df.end, df.strand)]
-        non_exonic = df[~df['overlaps_ncrna']] 
-        non_exonic.to_csv(str(output.peaks), sep='\t', index=False)    
-
-rule remove_overlap_ncrna_from_all_genomic:
-    # In progress.
-    input:
-        peaks = MACS_PEAKS + "/filtered/with_strand/{protein}_peaks.narrowPeak",
-        gtf = "assets/reference/gencode.v39.basic.annotation.gtf",
-    output:
-        peaks = MACS_PEAKS + "/filtered/with_strand/no_ncrna/{protein}_peaks.narrowPeak",
-    run:
-        db_fname = "data/processed/features.db"
-        db = gffutils.FeatureDB(db_fname, keep_order=True)
-        df = peak_loader(str(input.peaks))
-        df['overlaps_ncrna'] = [overlap_ncrna(*tup, db) for tup in zip(df.chrom, df.start, df.end, df.strand)]
-        non_exonic = df[~df['overlaps_ncrna']] 
-        non_exonic.to_csv(str(output.peaks), sep='\t', index=False)    
-        
 ################################################################
 # Convert transcriptomic coordinates to genomic coordinates.
 # Also, write their bedgraphs.
@@ -631,9 +429,9 @@ def peaks_to_bedgraph(fname, outfname):
 
 rule genomic_coordinates_of_transcriptomic_peaks_filtered:
     input:
-        peaks = MACS_PEAKS + "/transcriptome/filtered/{protein}_peaks.narrowPeak",
+        peaks = MACS_PEAKS + "/transcriptome/{protein}_peaks.narrowPeak",
     output:
-        peaks = MACS_PEAKS + "/transcriptome/filtered/genomic_coord/{protein}_peaks.narrowPeak",
+        peaks = MACS_PEAKS + "/transcriptome/genomic_coord/{protein}_peaks.narrowPeak",
         bdg = BEDGRAPH + "/transcriptome_peaks/filtered/{protein}.wig",
     run:
         df = transcriptome_peak_coordinates_to_genomic(str(input.peaks))
@@ -656,17 +454,17 @@ rule genomic_coordinates_of_transcriptomic_peaks_filtered:
 #########################################################        
 rule peak_bedgraph_no_ncrna:
     input:
-        peaks =MACS_PEAKS + "/filtered/with_strand/no_ncrna/{protein}_peaks.narrowPeak"
+        peaks = MACS_PEAKS + "/genomic_no_ncrna/{protein}_peaks.narrowPeak"
     output:
-        bdg = BEDGRAPH + "/peaks/filtered/no_ncrna/{protein}.wig"
+        bdg = BEDGRAPH + "/peaks/genomic_no_ncrna/{protein}.wig"
     run:
         peaks_to_bedgraph(str(input.peaks), str(output.bdg))
         
 rule peak_bedgraph_nonexonic_stranded_no_ncrna:
     input:
-        peaks = MACS_PEAKS + "/filtered/nonexonic_stranded_no_ncrna/{protein}_peaks.narrowPeak",
+        peaks = MACS_PEAKS + "/genomic_nonexonic_no_ncrna//{protein}_peaks.narrowPeak",
     output:
-        bdg = BEDGRAPH + "/peaks/filtered/nonexonic_stranded_no_ncrna/{protein}.wig", 
+        bdg = BEDGRAPH + "/peaks/genomic_nonexonic_no_ncrna/{protein}.wig", 
     run:
         peaks_to_bedgraph(str(input.peaks), str(output.bdg))
         
@@ -691,13 +489,12 @@ def write_fa(df, out_fa):
     else:
         with open(out_fa, 'w') as f:
             f.write('>No_peaks\nNNNNNNNNNNNN\n>No_peaks2\nNNNNNN\n')
-    
-rule write_fastas:
+rule write_fastas_genomic_no_ncrna:
     input:
-        peaks = expand(MACS_PEAKS + "/filtered/with_strand/no_ncrna/{protein}_peaks.narrowPeak", protein=PROTEINS),
+        peaks = expand(MACS_PEAKS + "/genomic_no_ncrna/{protein}_peaks.narrowPeak", protein=PROTEINS),
     output:
-        peak_fastas = expand(MACS_PEAKS + "/fastas/genomic_no_ncrna/{protein}.fa", protein=PROTEINS),
-        randoms = expand(MACS_PEAKS + "/fastas/randomControls/{protein}.fa", protein=PROTEINS),
+        peak_fastas = expand(MACS_PEAKS + "/genomic_no_ncrna/fastas/{protein}.fa", protein=PROTEINS),
+        randoms = expand(MACS_PEAKS + "/randomControls/fastas/{protein}.fa", protein=PROTEINS),
     run:
         genome = load_fasta(config['genomic_fasta'])
         peaks_files = [str(x) for x in input.peaks]
@@ -715,9 +512,9 @@ rule write_fastas:
 
 rule write_fastas_genomic_nonexonic:
     input:
-        peaks = expand(MACS_PEAKS + "/filtered/nonexonic_stranded_no_ncrna/{protein}_peaks.narrowPeak", protein=PROTEINS),
+        peaks = expand(MACS_PEAKS + "/genomic_nonexonic_no_ncrna/{protein}_peaks.narrowPeak", protein=PROTEINS),
     output:
-        peak_fastas = expand(MACS_PEAKS + "/fastas/nonexonic_stranded_no_ncrna/{protein}.fa", protein=PROTEINS),
+        peak_fastas = expand(MACS_PEAKS + "/genomic_nonexonic_no_ncrna/fastas/{protein}.fa", protein=PROTEINS),
     run:
         genome = load_fasta(config['genomic_fasta'])
         peaks_files = [str(x) for x in input.peaks]
@@ -730,13 +527,36 @@ rule write_fastas_genomic_nonexonic:
             df = add_seq(df, genome)
             df = df.loc[[len(seq)>9 for seq in df.seq], :]
             write_fa(df, out_fa)
+            
+rule write_fastas_transcriptome:
+    input:
+        peaks = expand(MACS_PEAKS + "/transcriptome/{protein}_peaks.narrowPeak", protein=PROTEINS),
+        fasta = "assets/reference/gencode.v39.transcripts.basic.fa",
+    output:
+        peak_fastas = expand(MACS_PEAKS + "/transcriptome/fastas/{protein}.fa", protein=PROTEINS),
+    run:
+        genome = load_fasta(str(input.fasta))
+        peaks_files = [str(x) for x in input.peaks]
+        fa_files = [str(x) for x in output.peak_fastas]
+        
+        for fname, out_fa in zip(peaks_files, fa_files):
+            print(fname)
+            
+            df = peak_loader(fname)
+            df = add_seq_transcriptome(df, genome)
+            df['fasta_seq_title'] = [x.split('|')[0] + x.split('|')[-1] for x in df.fasta_seq_title]
+            #df['fasta_seq_title'] = [re.sub('.', '_', x) for x in df.fasta_seq_title]
+            df = df.loc[[len(seq)>9 for seq in df.seq], :]
+            
+            print(f"len df.index = {len(df.index)}.")
+            write_fa(df, out_fa)
 
 rule write_combined_transcriptome_and_nonexonic_fasta:
     input:
-        fa1 = expand(MACS_PEAKS + "/fastas/transcriptome/{protein}.fa", protein=PROTEINS),
-        fa2 = expand(MACS_PEAKS + "/fastas/nonexonic_stranded_no_ncrna/{protein}.fa", protein=PROTEINS),
+        fa1 = expand(MACS_PEAKS + "/transcriptome/fastas/{protein}.fa", protein=PROTEINS),
+        fa2 = expand(MACS_PEAKS + "/genomic_nonexonic_no_ncrna/fastas/{protein}.fa", protein=PROTEINS),
     output:
-        fa = expand(MACS_PEAKS + "/fastas/combined/{protein}.fa", protein=PROTEINS),
+        fa = expand(MACS_PEAKS + "/combined/fastas/{protein}.fa", protein=PROTEINS),
     run:
         txpt = [str(x) for x in input.fa1]
         nonex = [str(x) for x in input.fa2]
@@ -746,9 +566,13 @@ rule write_combined_transcriptome_and_nonexonic_fasta:
 
 rule size_filter_fasta:
     input:
-        fa = expand(MACS_PEAKS + "/fastas/combined/{protein}.fa", protein=PROTEINS),
+        fa = expand(
+            MACS_PEAKS + "/{filtering}/fastas/{protein}.fa", protein=PROTEINS,
+            filtering=['transcriptome', 'combined', 'genomic', 'genomic_no_ncrna', 'genomic_nonexonic_no_ncrna']),
     output:
-        fa = expand(MACS_PEAKS + "/fastas/combined/short/{protein}.fa", protein=PROTEINS),
+        fa = expand(
+            MACS_PEAKS + "/{filtering}/fastas/short/{protein}.fa", protein=PROTEINS,
+            filtering=['transcriptome', 'combined', 'genomic', 'genomic_no_ncrna', 'genomic_nonexonic_no_ncrna']),
     run:
         in_fa = [str(x) for x in input.fa]
         out_fa = [str(x) for x in output.fa]
@@ -763,109 +587,10 @@ rule size_filter_fasta:
                         if len(li) < 500:
                             outf.write(f"{name}{li}")
             outf.close()
-            
-rule write_fastas_transcriptome:
-    input:
-        peaks = expand(MACS_PEAKS + "/transcriptome/filtered/{protein}_peaks.narrowPeak", protein=PROTEINS),
-        fasta = "assets/reference/gencode.v39.transcripts.basic.fa",
-    output:
-        peak_fastas = expand(MACS_PEAKS + "/fastas/transcriptome/{protein}.fa", protein=PROTEINS),
-        randoms = expand(MACS_PEAKS + "/fastas/transcriptome/randomControls/{protein}.fa", protein=PROTEINS),
-    run:
-        genome = load_fasta(str(input.fasta))
-        peaks_files = [str(x) for x in input.peaks]
-        fa_files = [str(x) for x in output.peak_fastas]
-        random_files = [str(x) for x in output.randoms]
-        
-        for fname, out_fa, out_random in zip(peaks_files, fa_files, random_files):
-            print(fname)
-            print(f"Writing to {out_fa} and {out_random}.")
-            
-            df = peak_loader(fname)
-            df = add_seq_transcriptome(df, genome)
-            df['fasta_seq_title'] = [x.split('|')[0] + x.split('|')[-1] for x in df.fasta_seq_title]
-            #df['fasta_seq_title'] = [re.sub('.', '_', x) for x in df.fasta_seq_title]
-            df = df.loc[[len(seq)>9 for seq in df.seq], :]
-            
-            print(f"len df.index = {len(df.index)}.")
-            write_fa(df, out_fa)
-            write_random_seqs(df['seq'], out_random)
-
-
         
 #########################################################
-# Motif calling.
+# QC.
 #########################################################
-
-#########################################################
-# Motif calling - combined, short.
-rule call_homer_comb:
-    input:
-        peak_fasta = MACS_PEAKS + "/fastas/combined/short/{protein}.fa",
-        randoms = MACS_PEAKS + "/fastas/randomControls/{protein}.fa",
-    output:
-        homer_results = directory(MACS_PEAKS +  "/homer/combined_short/{protein}/"),
-    conda:
-        "envs/homer.yml"
-    shell:
-        "findMotifs.pl {input.peak_fasta} fasta {output.homer_results} -fasta {input.randoms} -rna -homer1 -len 6,7,8"
-
-rule call_dreme_comb:
-    input:
-        fasta = MACS_PEAKS + "/fastas/combined/short/{protein}.fa",
-    output:
-        folder = directory(MACS_PEAKS +  "/dreme/combined_short/{protein}/"),
-    conda:
-        "envs/meme.yml"        
-    shell:
-        "dreme -p {input.fasta} -rna -norc -oc {output.folder} -e 0.000001 -t 300"
-        
-#########################################################
-# Motif calling - genomic.
-rule call_homer:
-    input:
-        peak_fasta = MACS_PEAKS + "/fastas/genomic_no_ncrna/{protein}.fa",
-        randoms = MACS_PEAKS + "/fastas/randomControls/{protein}.fa",
-    output:
-        homer_results = directory(MACS_PEAKS +  "/homer/genomic_no_ncrna/{protein}/"),
-    conda:
-        "envs/homer.yml"
-    shell:
-        "findMotifs.pl {input.peak_fasta} fasta {output.homer_results} -fasta {input.randoms} -rna -homer1 -len 6,7,8"
-        
-rule call_dreme:
-    input:
-        fasta = MACS_PEAKS + "/fastas/genomic_no_ncrna/{protein}.fa",
-    output:
-        folder = directory(MACS_PEAKS +  "/dreme/genomic_no_ncrna/{protein}/"),
-    conda:
-        "envs/meme.yml"        
-    shell:
-        "dreme -p {input.fasta} -rna -norc -oc {output.folder} -e 0.000001 -t 300"
-        
-#########################################################
-# Motif calling - nonexonic.
-rule call_homer_nonexonic:
-    input:
-        peak_fasta = MACS_PEAKS + "/fastas/nonexonic_stranded_no_ncrna/{protein}.fa",
-        randoms = MACS_PEAKS + "/fastas/randomControls/{protein}.fa",
-    output:
-        homer_results = directory(MACS_PEAKS +  "/homer/nonexonic_stranded_no_ncrna/{protein}/"),
-    conda:
-        "envs/homer.yml"
-    shell:
-        "findMotifs.pl {input.peak_fasta} fasta {output.homer_results} -fasta {input.randoms} -rna -homer1 -len 6,7,8"
-        
-rule call_dreme_nonexonic:
-    input:
-        fasta = MACS_PEAKS + "/fastas/nonexonic_stranded_no_ncrna/{protein}.fa",
-    output:
-        folder = directory(MACS_PEAKS +  "/dreme/nonexonic_stranded_no_ncrna/{protein}/"),
-    conda:
-        "envs/meme.yml"        
-    shell:
-        "dreme -p {input.fasta} -rna -norc -oc {output.folder} -e 0.000001 -t 300"
-        
 rule transcriptome_bedgraph:
     input:
         db_fname = "data/processed/features.db",
@@ -964,4 +689,6 @@ Random-RNA: 5’-UUG GUA GUC ACC CCA AAU UGU UAU U-3’.
 
 CLIP RNA: CAGTG GC TGC TGC TGTGGCCACGTG
 G4 RNA:   GTTGGGGCGGGCGTTGGGTTTGGGGGGACG
+
+211220_ddx50/outs/peaks/macs2/dreme/nonexonic/DDX50_LX_RR
 """

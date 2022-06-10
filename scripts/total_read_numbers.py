@@ -32,7 +32,8 @@ def total_read_numbers(folder: str, outfile='./data/total_read_numbers.txt') -> 
     Assuming each read is a single point with value 1, this is the total read number.
     Write the results to a file.
     """
-    os.makedirs(os.path.dirname(outfile), exist_ok=True)
+    if '/' in outfile:
+        os.makedirs(os.path.dirname(outfile), exist_ok=True)
     
     aucs = {}
     for fname in glob.glob(f"{folder}/*.+.wig"):

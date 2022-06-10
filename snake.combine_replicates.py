@@ -159,6 +159,7 @@ rule total_read_numbers:
         import scripts.total_read_numbers
         scripts.total_read_numbers.total_read_numbers(
             folder=BEDGRAPH, outfile=str(output.total_reads))
+        #scripts.total_read_numbers.total_read_numbers(folder=BEDGRAPH, outfile="temp/test.txt")   
         
 rule convert_to_3prime_bedgraph:
     """5' end of read 1 -> 3' end of cDNA. This outputs the 3' end of the cDNA molecule."""
