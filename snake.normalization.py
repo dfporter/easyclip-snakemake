@@ -129,10 +129,11 @@ rule make_raw_signal_objects:
         utr5 = TOP_DIR + "/data/processed/normalized_signal/utr5/raw_reads.{sample}.dill",
         utr3 = TOP_DIR + "/data/processed/normalized_signal/utr3/raw_reads.{sample}.dill",
     run:
-        
+        #params = {'which_RNAs': 'set', 'how_norm': 'sum', 'one_txpt_per_gene': 'longest',
+        #          'gene_names': set(["NOC2L", "DDX11L1", "SAMD11"]), 'top': 100, 'mature_rna': True}        
         params = {
             # Either all ('all'), pass a set ('set'), or take the top ('top').
-            'which_RNAs': 'all',
+            'which_RNAs': 'top',
 
             # Either no norm (just sum RPMs, 'none') or each RNA to total ('sum').
             'how_norm': 'sum',
@@ -142,6 +143,9 @@ rule make_raw_signal_objects:
 
             # If which_RNAs='top', need this param (ignored otherwise):
             'top': 100,
+            
+            'one_txpt_per_gene': 'longest',
+            'mature_rna': True,
         }
 
         # Tidy version to copy/paste:
@@ -157,6 +161,7 @@ rule make_raw_signal_objects:
         
         # The version in data/processed/features.db has introns added.
         db_fname = "data/processed/features.db"
+        db_fname = "data/processed/features.utrs_fixed.db"
         db = gffutils.FeatureDB(db_fname, keep_order=True)
         
         #importlib.reload(bigwigToNormArray); importlib.reload(regionsFromDB)
@@ -169,7 +174,8 @@ rule make_raw_signal_objects:
             
             # coverages: dict of {bw_name: 2D numpy array}
             cov_txpt = sa_txpt.read_coverages_in_regions(
-                feat_select, n_features=n_feat, target_size=target_size) 
+                feat_select, n_features=n_feat, target_size=target_size, regions_are_split=bool(
+                'mature_rna' in params and params['mature_rna']==True))
             
             to_fname = {
                 'five_prime_utr': str(output.utr5), 'three_prime_utr': str(output.utr3),
@@ -270,7 +276,6 @@ rule normalize_signal_objects:
             return means
 
         def norm_and_write_object(cov, groups, output_dill, out_figname):
-        #print(cov.keys())
 
             mean_cov_txpt = combine_groups(cov, groups)
             # Plot smoothed coverage:

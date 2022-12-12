@@ -489,6 +489,7 @@ def write_fa(df, out_fa):
     else:
         with open(out_fa, 'w') as f:
             f.write('>No_peaks\nNNNNNNNNNNNN\n>No_peaks2\nNNNNNN\n')
+            
 rule write_fastas_genomic_no_ncrna:
     input:
         peaks = expand(MACS_PEAKS + "/genomic_no_ncrna/{protein}_peaks.narrowPeak", protein=PROTEINS),

@@ -20,8 +20,8 @@ def load_cov(bw_fnames, db, featuretype='transcript', subset=False, target_size=
     
 load_cov is passed a list of bigwig filenames with an expected format, 
 the passed ones being the positive strand files, and a database object,
-and the feature type to subset from the database object, transcript, exon 
-or intron or three prime UTR or five prime UTR etc., and a dictionary of 
+and the feature type to subset from the database object (transcript, exon 
+or intron or three prime UTR or five prime UTR etc.), and a dictionary of 
 parameters. 
 
 This function might better be copied and pasted into
@@ -55,10 +55,13 @@ reflect the more general case of normalizing coverage across genomic elements.
 """
 
 def an_iv_list(feat, strand=False):
-    """Given a feature object from gffutils return an interval list."""
+    """Given A feature object from gffutils return an interval list.
+    Subtracting 1 from the start because gffs are 1-based closed.
+    This makes 0-based half-open.
+    """
     if not strand:
-        return [feat.chrom, feat.start, feat.end]
-    return [feat.chrom, feat.start, feat.end, feat.strand]
+        return [feat.chrom, feat.start-1, feat.end]
+    return [feat.chrom, feat.start-1, feat.end, feat.strand]
 
 
 def iv_iterable(iterable_of_feats, strand=False):
@@ -66,29 +69,103 @@ def iv_iterable(iterable_of_feats, strand=False):
     for feat in iterable_of_feats:
         yield an_iv_list(feat, strand=strand)
 
+def one_txpt_per_gene(db, feat_select, how='longest'):
+    gene_to_txpt = collections.defaultdict(set)
 
-def get_feat_select(db, featuretype, params, subset=False):
+    if how == 'random':
+        for feat in feat_select:
+            gene_to_txpt[feat.attributes._d['gene_name'][0]].add(feat.attributes._d['transcript_id'][0])
+        for gene in gene_to_txpt:
+            gene_to_txpt[gene] = random.choice(list(gene_to_txpt[gene]))
+        
+        # Now subset:
+        feat_select = [
+            feat for feat in feat_select \
+            if gene_to_txpt[feat.attributes._d['gene_name'][0]]==feat.attributes._d['transcript_id'][0]]
+        
+    elif how == 'longest':
+        txpt_to_len = {}
+        for feat in feat_select:
+            gene = feat.attributes._d['gene_name'][0]
+            txpt = feat.attributes._d['transcript_id'][0]
+            txpt_to_len[txpt] = feat.end - feat.start
+            
+            if gene in gene_to_txpt:
+                if txpt_to_len[txpt] > txpt_to_len[gene_to_txpt[gene]]:
+                    gene_to_txpt[gene] = txpt
+            else:
+                gene_to_txpt[gene] = txpt
+            
+        # Now subset:
+        print(f"Subsetting to one txpt per gene, starting with {len(feat_select)} features...")
+        feat_select = [
+            feat for feat in feat_select \
+            if gene_to_txpt[feat.attributes._d['gene_name'][0]]==feat.attributes._d['transcript_id'][0]]
+        print(f"... Ended up with {len(feat_select)} features...")
+        
+    return feat_select
+
+def as_mature_rna(db, feat_select, strand=True):
+    subregions = []
+    for feat in feat_select:
+        exons = [an_iv_list(x, strand=strand) for x in \
+                 db.children(feat.id, featuretype='exon', order_by='start')]
+        if len(exons) > 0 and len(exons[0])>0:
+            subregions.append(exons)
+    return subregions
+
+def organize_regions_from_gene_together(db, feat_select, featuretype, strand=True):
+    subregions = []
+    for feat in feat_select:
+        exons = [an_iv_list(x, strand=strand) for x in \
+                     db.children(feat.id, featuretype=featuretype, order_by='start')]
+        if len(exons) > 0 and len(exons[0])>0:
+            subregions.append(exons)
+    return subregions
+
+def filtering(db, feat_select, params, _one_txpt_per_gene=False):
+    
+    if 'which_RNAs' not in params or params['which_RNAs']=='all':
+        pass
+    elif params['which_RNAs']=='set':
+        feat_select = [x for x in feat_select if x.attributes['gene_name'][0] in params['gene_names']]
+    elif params['which_RNAs']=='protein_coding':
+        feat_select = [x for x in feat_select if x.attributes['transcript_type'][0]=='protein_coding']
+    
+    if 'one_txpt_per_gene' in params and params['one_txpt_per_gene']:
+        
+        feat_select = one_txpt_per_gene(db, feat_select, how=params['one_txpt_per_gene'])
+    
+    return feat_select
+
+def get_feat_select(
+    db, featuretype, params, subset=False, _one_txpt_per_gene=False, mature_rna=False):
     """Given a gffutils database, featuretype and params dictionary,
     return a list of intervals."""
     
-    feat_select = db.features_of_type(featuretype)
-
-    if 'which_RNAs' not in params or params['which_RNAs']=='all':
-        feat_select = list(iv_iterable(feat_select, strand=True)) 
+    mature_rna = params['mature_rna'] if ('mature_rna' in params) else False
+            
+    if featuretype == 'transcript':
+        feat_select = db.features_of_type(featuretype)
+        feat_select = filtering(db, feat_select, params)
         
-    elif params['which_RNAs']=='set':
-        feat_select = [x for x in feat_select if x.attributes['gene_name'][0] in params['gene_names']]
-        feat_select = list(iv_iterable(feat_select, strand=True)) 
+        if mature_rna:
+            feat_select = as_mature_rna(db, feat_select, strand=True)
+        else:
+            feat_select = list(iv_iterable(feat_select, strand=True)) 
 
-    elif params['which_RNAs']=='protein_coding':
-        feat_select = [x for x in feat_select if x.attributes['transcript_type'][0]=='protein_coding']
-        feat_select = list(iv_iterable(feat_select, strand=True)) 
-        
+    else:
+        feat_select = db.features_of_type('transcript')
+        feat_select = filtering(db, feat_select, params)
+        feat_select = organize_regions_from_gene_together(db, feat_select, featuretype, strand=True)
+
     n_feat = len(feat_select)
     if subset and subset < n_feat:
         feat_select = random.sample(feat_select, k=subset)
 
     print(f"{len(feat_select)} features to load.")
+    if len(feat_select):
+        print(f"The first is {feat_select[0]}")
     
     return feat_select
 

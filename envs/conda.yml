@@ -15,11 +15,12 @@ dependencies:
   - bedtools
   - ucsc-bedsort
   - ucsc-bedgraphtobigwig
-  - gffutils
+  #- gffutils
   - cutadapt
   - HTSeq
   - pyBigWig
-  - pysam
+  #- pysam
   - snakemake
-  - star=2.7.1a
+  #- star=2.7.1a
   - samtools
+  - pybigwig

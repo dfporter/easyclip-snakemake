@@ -127,11 +127,13 @@ rule convert_to_3prime_bedgraph:
     output:
         plus = ex.file_paths['bedgraph'].rstrip('/') + "/{sample}.+.wig",  # Bedgraph. wig extension so IGV loads.
         minus = ex.file_paths['bedgraph'].rstrip('/') + "/{sample}.-.wig",  # Bedgraph. wig extension so IGV loads.
-    run:
-        shell("bedtools genomecov -bg -strand + -5 -ibam {input} > {output.plus}")
-        shell("bedSort {output.plus} {output.plus}")
-        shell("bedtools genomecov -bg -strand - -5 -ibam {input} > {output.minus}")
-        shell("bedSort {output.minus} {output.minus}")
+    conda:
+        "envs/bedtools.yml"
+    shell:
+        "bedtools genomecov -bg -strand + -5 -ibam {input} > {output.plus} ; "
+        "bedSort {output.plus} {output.plus} ; "
+        "bedtools genomecov -bg -strand - -5 -ibam {input} > {output.minus} ; "
+        "bedSort {output.minus} {output.minus} ; "
 
 rule convert_to_bedgraph:
     input:

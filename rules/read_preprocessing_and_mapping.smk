@@ -6,11 +6,30 @@ import scripts.split_bam
 # Read mapping, splitting and duplicate removal. 
 #########################################################  
 #"""
+
+# Make this config value, if it exists, a path to a directory.
+if 'rDNA_genome_index' in config:
+    if config['rDNA_genome_index'].split('/')[-1] == 'Genome':  # It's a file, not the directory.
+        config['rDNA_genome_index'] = os.path.dirname(config['rDNA_genome_index'])
+        
+STAR_RDNA_INDEX_FOLDER = config['rDNA_genome_index'] if 'rDNA_genome_index' in config else "assets/rDNA_star_index"
+STAR_RDNA_INDEX_GENOME_FILE = config['rDNA_genome_index'] + '/Genome' if 'rDNA_genome_index' in config else "assets/rDNA_star_index/Genome"
+
+rule make_rDNA_index:
+    input:
+        fa = "assets/reference/U13369_rRNA.fasta",
+        gtf = "data/processed/U13369_rRNA.gtf",
+    output:
+        star_rdna = STAR_RDNA_INDEX_GENOME_FILE,
+    shell:
+        "STAR   --runMode genomeGenerate --runThreadN 16 --genomeDir " + STAR_RDNA_INDEX_FOLDER + \
+        " --genomeFastaFiles {input.fa} --genomeSAindexNbases 5 --limitGenomeGenerateRAM 100000000000   --sjdbGTFfile {input.gtf} --sjdbOverhang 75"
+        
 rule map_to_rDNA:
     input:
         fq1 = expand(FASTQ_DIR + '/ready_to_map/{pcr_index}R1.fastq.gz', pcr_index=PCR_INDEX_SET),
         fq2 = expand(FASTQ_DIR + '/ready_to_map/{pcr_index}R2.fastq.gz', pcr_index=PCR_INDEX_SET),
-        star_repeats_genome = "assets/rDNA_star_index/Genome",
+        star_rdna = STAR_RDNA_INDEX_GENOME_FILE,
     output:
         by_index = expand(SAMS_DIR + '/{pcr_index}rDNA.bam', pcr_index=PCR_INDEX_SET),
         filt = expand(SAMS_DIR + '/{pcr_index}rDNA.filtered.bam', pcr_index=PCR_INDEX_SET),
@@ -25,7 +44,7 @@ rule map_to_rDNA:
             pcr_index = os.path.basename(input_r1).split('R1.fastq.gz')[0]           
 
             cmd = config['STAR']
-            cmd += f" --genomeDir assets/rDNA_star_index"
+            cmd += f" --genomeDir " + STAR_RDNA_INDEX_FOLDER
             cmd += ' --runThreadN ' + str(threads)
             cmd += f' --readFilesIn {input_r1} {input_r2}'
             cmd += ' --alignIntronMax 1'  # Max intron size = 1. Setting to 0 causes the default behavior.
