@@ -132,7 +132,7 @@ rule repeats_chromosome:
     output:
         fa = 'assets/reference/repeats_chrom.fa',
         gtf = 'assets/reference/repeats.gtf',
-        repeats = 'assets/repeats_star_index/Genome',
+        #repeats = 'assets/repeats_star_index/Genome',
     threads:
         16
     run:
@@ -140,7 +140,7 @@ rule repeats_chromosome:
         entries_df = ep.parse()
         ep.write_as_chromosome()
         os.makedirs('assets/repeats_star_index/', exist_ok=True)
-        shell(config['STAR'] + f" --genomeSAindexNbases 5 --limitGenomeGenerateRAM 100000000000 --runThreadN 16 --runMode genomeGenerate --genomeDir assets/repeats_star_index --genomeFastaFiles {output.fa} --sjdbGTFfile {output.gtf} --sjdbOverhang 75")
+        #shell(config['STAR'] + f" --genomeSAindexNbases 5 --limitGenomeGenerateRAM 100000000000 --runThreadN 16 --runMode genomeGenerate --genomeDir assets/repeats_star_index --genomeFastaFiles {output.fa} --sjdbGTFfile {output.gtf} --sjdbOverhang 75")
 # --genomeSAindexNbases 5 is well below the default 14. It speeds up the mapping to small genomes.
 
 rule download_dfam_annotation:

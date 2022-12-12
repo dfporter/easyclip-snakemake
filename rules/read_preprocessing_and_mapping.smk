@@ -2,10 +2,11 @@ import os, sys, re, glob, pandas, importlib, shutil, subprocess
 import scripts
 import scripts.split_bam
 
-#########################################################
-# Read mapping, splitting and duplicate removal. 
-#########################################################  
 #"""
+
+#########################################################################
+# Set the paths for the rDNA and repeats indexes and make if needed.
+#########################################################################
 
 # Make this config value, if it exists, a path to a directory.
 if 'rDNA_genome_index' in config:
@@ -15,16 +16,41 @@ if 'rDNA_genome_index' in config:
 STAR_RDNA_INDEX_FOLDER = config['rDNA_genome_index'] if 'rDNA_genome_index' in config else "assets/rDNA_star_index"
 STAR_RDNA_INDEX_GENOME_FILE = config['rDNA_genome_index'] + '/Genome' if 'rDNA_genome_index' in config else "assets/rDNA_star_index/Genome"
 
+# Make this config value, if it exists, a path to a directory.
+if 'repeats_star_index' in config:
+    if config['repeats_star_index'].split('/')[-1] == 'Genome':  # It's a file, not the directory.
+        config['repeats_star_index'] = os.path.dirname(config['repeats_star_index'])
+        
+STAR_REPEATS_INDEX_FOLDER = config['repeats_star_index'] if 'repeats_star_index' in config else "assets/repeats_star_index"
+STAR_REPEATS_INDEX_GENOME_FILE = config['repeats_star_index'] + '/Genome' if 'repeats_star_index' in config else "assets/repeats_star_index/Genome"
+
+
 rule make_rDNA_index:
     input:
         fa = "assets/reference/U13369_rRNA.fasta",
         gtf = "data/processed/U13369_rRNA.gtf",
     output:
         star_rdna = STAR_RDNA_INDEX_GENOME_FILE,
+    threads: 16
     shell:
-        "STAR   --runMode genomeGenerate --runThreadN 16 --genomeDir " + STAR_RDNA_INDEX_FOLDER + \
+        "STAR   --runMode genomeGenerate --runThreadN {threads} --genomeDir " + STAR_RDNA_INDEX_FOLDER + \
         " --genomeFastaFiles {input.fa} --genomeSAindexNbases 5 --limitGenomeGenerateRAM 100000000000   --sjdbGTFfile {input.gtf} --sjdbOverhang 75"
-        
+
+rule make_repeats_index:
+    input:
+        fa = "assets/reference/repeats_chrom.fa",
+        gtf = "assets/reference/repeats.gtf",
+    output:
+        star_rdna = STAR_REPEATS_INDEX_GENOME_FILE,
+    threads: 10
+    shell:
+        "STAR   --runMode genomeGenerate --runThreadN {threads} --genomeDir " + STAR_REPEATS_INDEX_FOLDER + \
+        " --genomeFastaFiles {input.fa} --genomeSAindexNbases 5 --limitGenomeGenerateRAM 100000000000   --sjdbGTFfile {input.gtf} --sjdbOverhang 75"
+
+#########################################################################
+# Read mapping, splitting and duplicate removal. 
+#########################################################################  
+
 rule map_to_rDNA:
     input:
         fq1 = expand(FASTQ_DIR + '/ready_to_map/{pcr_index}R1.fastq.gz', pcr_index=PCR_INDEX_SET),
@@ -138,7 +164,7 @@ rule mapping:
     input:
         fq1 = expand(SAMS_DIR + '/{pcr_index}rDNA.Unmapped.out.mate1', pcr_index=PCR_INDEX_SET),
         fq2 = expand(SAMS_DIR + '/{pcr_index}rDNA.Unmapped.out.mate2', pcr_index=PCR_INDEX_SET),
-        star_repeats_genome = "assets/repeats_star_index/Genome",
+        star_repeats_genome = STAR_REPEATS_INDEX_GENOME_FILE #"assets/repeats_star_index/Genome", 
     output:
         by_index = expand(SAMS_DIR + '/{pcr_index}all_reads.bam', pcr_index=PCR_INDEX_SET),
         all_reads = SAMS_DIR + "/all_reads.bam",
@@ -151,7 +177,7 @@ rule mapping:
             pcr_index = os.path.basename(input_r1).split('rDNA.Unmapped.out.mate1')[0]           
 
             cmd = config['STAR']
-            cmd += f" --genomeDir assets/repeats_star_index"
+            cmd += f" --genomeDir {STAR_REPEATS_INDEX_FOLDER}"
             cmd += ' --runThreadN ' + str(threads)
             cmd += f' --readFilesIn {input_r1} {input_r2}'
             cmd += ' --alignIntronMax 1'  # Max intron size = 1. Setting to 0 causes the default behavior.
